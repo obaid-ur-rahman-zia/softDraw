@@ -1,7 +1,7 @@
 export default {
   providers: [
     {
-      domain: "https://grand-colt-16.clerk.accounts.dev",
+      domain: "https://clerk.softdraw.site",
       applicationID: "convex",
     },
   ]
