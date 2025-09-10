@@ -35,11 +35,11 @@ export const RenameModal = () => {
       title,
     })
       .then(() => {
-        toast.success("Board renamed");
+        toast.success("Whiteboard renamed");
         onClose();
       })
       .catch(() => {
-        toast.error("Failed to rename board");
+        toast.error("Failed to rename whiteboard");
       });
   };
 
@@ -47,9 +47,9 @@ export const RenameModal = () => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit board title</DialogTitle>
+          <DialogTitle>Edit whiteboard title</DialogTitle>
         </DialogHeader>
-        <DialogDescription>Enter a new title for this board</DialogDescription>
+        <DialogDescription>Enter a new title for this whiteboard</DialogDescription>
         <form onSubmit={onSubmit} className="space-y-4">
           <Input
             disabled={pending}
@@ -57,7 +57,7 @@ export const RenameModal = () => {
             maxLength={60}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Board Title"
+            placeholder="Whiteboard Title"
           />
           <DialogFooter>
             <DialogClose>

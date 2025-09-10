@@ -107,7 +107,7 @@ export const favourite = mutation({
     const board = await ctx.db.get(args.id);
     
     if (!board) {
-      throw new Error("Board not found");
+      throw new Error("Whiteboard not found");
     }
     
     const userId = identity.subject;
@@ -122,7 +122,7 @@ export const favourite = mutation({
         .unique()
 
     if(existingFavourite) {
-        throw new Error("Board already favourited!")
+        throw new Error("Whiteboard already favourited!")
     }
 
     await ctx.db.insert("userFavourites", {
@@ -149,7 +149,7 @@ export const unfavourite = mutation({
     const board = await ctx.db.get(args.id);
     
     if (!board) {
-      throw new Error("Board not found");
+      throw new Error("Whiteboard not found");
     }
     
     const userId = identity.subject;
@@ -164,7 +164,7 @@ export const unfavourite = mutation({
         .unique()
 
     if(!existingFavourite) {
-        throw new Error("Favourited Board not found!")
+        throw new Error("Favourited whiteboard not found!")
     }
 
     await ctx.db.delete(existingFavourite._id)

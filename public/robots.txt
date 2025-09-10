@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://softdraw.site
+
+# Sitemaps
+Sitemap: https://softdraw.site/sitemap.xml

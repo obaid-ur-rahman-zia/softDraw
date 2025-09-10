@@ -6,6 +6,15 @@ html, body, :root {
   height: 100%;
 }
 
+@font-face {
+  font-family: gilroy;
+  src: url("/fonts/gilroy.ttf");
+}
+
+*{
+  font-family: "gilroy";
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

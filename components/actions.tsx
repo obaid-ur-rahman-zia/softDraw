@@ -49,8 +49,8 @@ export const Actions = ({
     mutate({
       id,
     })
-      .then(() => toast.success("Board deleted"))
-      .catch(() => toast.error("Failed to delete board"));
+      .then(() => toast.success("Whiteboard deleted"))
+      .catch(() => toast.error("Failed to delete whiteboard"));
   };
 
   return (
@@ -64,15 +64,15 @@ export const Actions = ({
       >
         <DropdownMenuItem className="p-3 cursor-pointer" onClick={onCopyLink}>
           <Link2 className="h-4 w-4 mr-2" />
-          Copy board link
+          Copy whiteboard link
         </DropdownMenuItem>
         <DropdownMenuItem className="p-3 cursor-pointer" onClick={() => onOpen(id, title)}>
           <Pencil className="h-4 w-4 mr-2" />
           Rename
         </DropdownMenuItem>
         <ConfirmModal
-            header="Delete board?"
-            description="This will delete the board and all its contents."
+            header="Delete whiteboard?"
+            description="This will delete the whiteboard and all its contents."
             disabled={pending}
             onConfirm={onDelete}
         >

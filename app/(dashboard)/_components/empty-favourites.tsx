@@ -10,8 +10,8 @@ export const EmptyFavourites = () => {
                 width={140}
                 alt="Empty"
             />
-            <h2 className="text-2xl font-semibold mt-6">No Favourites boards!</h2>
-            <p className="text-muted-foreground text-sm mt-2 ">Try favouriting a board</p>
+            <h2 className="text-2xl font-semibold mt-6">No Favourite Whiteboard!</h2>
+            <p className="text-muted-foreground text-sm mt-2 ">Try favouriting a Whiteboard</p>
         </div>
     )
 } 

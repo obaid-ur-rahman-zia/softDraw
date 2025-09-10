@@ -21,7 +21,7 @@ export const BoardList = ({ orgId, query }: BoardListProps) => {
     if (data === undefined) {
     return (
       <div className="text-3xl">
-        <h2>{query.favourites ? "Favourite" : "Team"} boards</h2>
+        <h2>{query.favourites ? "Favourite" : "Team"} whiteboards</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10">
             <NewBoardButton orgId={orgId} disabled />
             <BoardCard.Skeleton />
@@ -47,7 +47,7 @@ export const BoardList = ({ orgId, query }: BoardListProps) => {
 
   return (
     <div className="text-3xl">
-      <h2>{query.favourites ? "Favourite" : "Team"} boards</h2>
+      <h2>{query.favourites ? "Favourite" : "Team"} whiteboards</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10">
         <NewBoardButton orgId={orgId} />
         {data?.map((board) => (

@@ -67,7 +67,7 @@ const OrgSidebar = () => {
             >
                 <Link href={"/"}>
                     <LayoutDashboard className="h-4 w-4 mr-2" />
-                    Team Boards
+                    Team Whiteboards
                 </Link>
             </Button>
             <Button
@@ -81,7 +81,7 @@ const OrgSidebar = () => {
                     query: { favourites: true}
                 }}>
                     <Star className="h-4 w-4 mr-2" />
-                    Favourite Boards
+                    Favourite Whiteboards
                 </Link>
             </Button>
         </div>

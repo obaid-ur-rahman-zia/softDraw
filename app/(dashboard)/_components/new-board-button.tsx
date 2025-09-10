@@ -23,11 +23,11 @@ const NewBoardButton = ({ orgId, disabled }: NewBoardButtonProps) => {
             title: "Untitled"
         })
         .then((id) => {
-            toast.success("Board created!");
+            toast.success("Whiteboard created!");
 
             router.push(`/board/${id}`)
         })
-        .catch(() => toast.error("Failed to create board!"))
+        .catch(() => toast.error("Failed to create whiteboard!"))
     }
 
   return (
@@ -35,13 +35,13 @@ const NewBoardButton = ({ orgId, disabled }: NewBoardButtonProps) => {
       disabled={pending || disabled}
       onClick={onClick}
       className={cn(
-        "col-span-1 aspect-[100/127] bg-blue-600 rounded-lg hover:bg-blue-800 flex flex-col items-center justify-center py-6",
+        "col-span-1 aspect-[100/127] bg-blue-400 rounded-lg hover:bg-blue-800 flex flex-col items-center justify-center py-6",
         (pending || disabled) && "opacity-75 hover:bg-blue-600 cursor-not-allowed"
       )}
     >
       <div />
       <Plus className="h-12 w-12 text-white stroke-1" />
-      <p className="text-sm text-white font-light">New Board</p>
+      <p className="text-sm text-white font-light">New Whiteboard</p>
     </button>
   );
 };

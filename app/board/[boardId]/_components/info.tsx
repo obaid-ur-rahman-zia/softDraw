@@ -40,7 +40,7 @@ const Info = ({ boardId }: InfoProps) => {
 
   return (
     <div className="top-2 absolute left-2 bg-white rounded-md px-1.5 h-12 flex items-center shadow-md">
-      <Hint label="Go to boards" side="bottom" sideOffset={10}>
+      <Hint label="Go to whiteboards" side="bottom" sideOffset={10}>
         <Button asChild variant={"board"} className="px-2">
           <Link href={"/"}>
             <Image src={"/logo.svg"} alt="Logo" width={40} height={40} />

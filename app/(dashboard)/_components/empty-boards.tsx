@@ -25,10 +25,10 @@ export const EmptyBoards = () => {
             orgId: organization.id,
         })
         .then((id) => {
-            toast.success("Board created!")
+            toast.success("Whiteboard created!")
             router.push(`/board/${id}`)
         })
-        .catch(() => toast.error("Failed to create board!"))
+        .catch(() => toast.error("Failed to create Whiteboard!"))
 
 
     }
@@ -41,11 +41,11 @@ export const EmptyBoards = () => {
                 width={110}
                 alt="Empty"
             />
-            <h2 className="text-2xl font-semibold mt-6">Create your first boards!</h2>
-            <p className="text-muted-foreground text-sm mt-2 ">Start by creating board for your organization</p>
+            <h2 className="text-2xl font-semibold mt-6">Create your first Whiteboard!</h2>
+            <p className="text-muted-foreground text-sm mt-2 ">Start by creating Whiteboard for your organization</p>
             <div className="mt-6">
                 <Button disabled={pending} size={"lg"} onClick={onClick}>
-                    Create board
+                    Create Whiteboard
                 </Button>
             </div>
         </div>
