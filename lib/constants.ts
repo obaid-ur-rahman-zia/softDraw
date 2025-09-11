@@ -9,7 +9,7 @@ interface AppProps {
 
 export const APP: AppProps = {
     APP_NAME: "SoftDraw",
-    APP_DOMAIN: "https://softdraw.site/",
+    APP_DOMAIN: "https://softdraw.site",
     APP_DESCRIPTION: "Softdraw is a virtual collaborative whiteboard tool that lets you easily sketch diagrams that have a hand-drawn feel to them.",
     APP_TITLE_DESCRIPTION: "Collaborative Whiteboard"
 }
