@@ -44,7 +44,7 @@ import { Button } from "@/components/ui/button";
 import Toolbar from "@/app/board/[boardId]/_components/toolbar";
 import { LayerRenderer } from "@/app/board/[boardId]/_components/layer-renderer";
 import { ColorPicker } from "@/app/board/[boardId]/_components/color-picker";
-import { Path } from "@/app/board/[boardId]/_components/path";
+import { Path, strokeWidthToSize } from "@/app/board/[boardId]/_components/path";
 import { BottomBar } from "@/components/canvas/bottom-bar";
 import {
   PropertiesPanel,
@@ -310,7 +310,10 @@ export const GuestBoard = () => {
       setPencilDraft(null);
       return;
     }
-    const layer = penPointsToPathLayer(pencilDraft, lastUsedColor);
+    const layer = penPointsToPathLayer(pencilDraft, lastUsedColor, {
+      strokeWidth: style.strokeWidth,
+      opacity: style.opacity,
+    });
     const id = nanoid();
     mutate((prev) => ({
       layers: { ...prev.layers, [id]: layer as Layer },
@@ -318,7 +321,7 @@ export const GuestBoard = () => {
     }));
     setPencilDraft(null);
     setCanvasState({ mode: CanvasMode.Pencil });
-  }, [pencilDraft, lastUsedColor, mutate]);
+  }, [pencilDraft, lastUsedColor, style, mutate]);
 
   // Finish a hand-drawn stroke: clean it up / snap to a shape, then insert.
   const commitHandStroke = useCallback(
@@ -978,7 +981,7 @@ export const GuestBoard = () => {
         canRedo={board.canRedo}
       />
 
-      {panelTarget && (
+      {panelTarget != null && (
         <PropertiesPanel
           target={panelTarget}
           style={panelStyle}
@@ -1152,6 +1155,8 @@ export const GuestBoard = () => {
               fill={colorToCss(lastUsedColor)}
               x={0}
               y={0}
+              size={strokeWidthToSize(style.strokeWidth)}
+              opacity={style.opacity}
             />
           )}
           {laserTrail.map((p, i) =>

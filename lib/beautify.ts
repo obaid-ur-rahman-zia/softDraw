@@ -219,7 +219,10 @@ export function buildRecognizedLayer(
   color: Color
 ): Layer {
   if (desc.kind === "path") {
-    return penPointsToPathLayer(desc.points, color) as Layer;
+    return penPointsToPathLayer(desc.points, color, {
+      strokeWidth: style.strokeWidth,
+      opacity: style.opacity,
+    }) as Layer;
   }
   if (desc.kind === "line") {
     return {

@@ -3,7 +3,7 @@
 import { Layer, LayerType } from "@/types/canvas";
 import { Text } from "./text";
 import { Note } from "./note";
-import { Path } from "./path";
+import { Path, strokeWidthToSize } from "./path";
 import { RoughShape } from "./rough-shape";
 import { Frame } from "./frame";
 import { Embed } from "./embed";
@@ -46,6 +46,8 @@ export const LayerRenderer = ({
           y={layer.y}
           fill={colorToCss(layer.stroke ?? layer.fill)}
           stroke={selectionColor}
+          size={strokeWidthToSize(layer.strokeWidth)}
+          opacity={layer.opacity}
         />
       );
     case LayerType.Note:

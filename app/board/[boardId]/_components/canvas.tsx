@@ -45,7 +45,7 @@ import { LayerPreview } from "./layer-preview";
 import { LayerRenderer } from "./layer-renderer";
 import { SelectionBox } from "./selection-box";
 import { SelectionTools } from "./selection-tools";
-import { Path } from "./path";
+import { Path, strokeWidthToSize } from "./path";
 import { useDisableScrollBounce } from "@/hooks/use-disable-scroll-bounce";
 import { useDeleteLayers } from "@/hooks/use-delete-layers";
 import { takeImport } from "@/lib/guest-handoff";
@@ -429,7 +429,8 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
       id,
       new LiveObject(penPointsToPathLayer(
         pencilDraft,
-        lastUsedColor
+        lastUsedColor,
+        { strokeWidth: style.strokeWidth, opacity: style.opacity }
       ))
     )
 
@@ -444,7 +445,7 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
       mode: CanvasMode.Pencil
     })
 
-  }, [lastUsedColor])
+  }, [lastUsedColor, style])
 
   const startDrawing = useMutation(
     ({ setMyPresence }, point: Point, pressure: number) => {
@@ -1053,7 +1054,7 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
         }
       />
       <SelectionTools camera={camera} setLastUsedColor={setLastUsedColor} />
-      {panelTarget && (
+      {panelTarget != null && (
         <PropertiesPanel
           target={panelTarget}
           style={panelStyle}
@@ -1175,6 +1176,8 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
               fill={colorToCss(lastUsedColor)}
               x={0}
               y={0}
+              size={strokeWidthToSize(style.strokeWidth)}
+              opacity={style.opacity}
               />
             )}
             {laserTrail.map((p, i) =>

@@ -172,7 +172,8 @@ export const PropertiesPanel = ({
   const isConnector = target === LayerType.Line || target === LayerType.Arrow;
   const isText = target === LayerType.Text || target === LayerType.Note;
   const isDraw = target === "pencil";
-  const hasBg = isShape || isDraw;
+  // Freehand strokes have no fill area — only shapes get a background/fill.
+  const hasBg = isShape;
   const hasEdges =
     target === LayerType.Rectangle ||
     target === LayerType.Diamond ||
