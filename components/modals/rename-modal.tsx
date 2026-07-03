@@ -14,12 +14,14 @@ import { FormEventHandler, useEffect, useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useApiMutation } from "@/hooks/use-api-mutation";
-import { api } from "@/convex/_generated/api";
+import { updateBoard } from "@/app/actions/board";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export const RenameModal = () => {
   const { isOpen, onClose, initialValues } = useRenameModal();
-  const { mutate, pending } = useApiMutation(api.board.update);
+  const { mutate, pending } = useApiMutation(updateBoard);
+  const router = useRouter();
 
   const [title, setTitle] = useState(initialValues.title);
 
@@ -37,6 +39,7 @@ export const RenameModal = () => {
       .then(() => {
         toast.success("Whiteboard renamed");
         onClose();
+        router.refresh();
       })
       .catch(() => {
         toast.error("Failed to rename whiteboard");

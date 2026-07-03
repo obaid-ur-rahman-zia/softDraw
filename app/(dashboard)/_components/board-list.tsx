@@ -1,69 +1,71 @@
-"use client";
-import { useQuery } from "convex/react";
+import { getBoards } from "@/lib/queries";
 import { EmptyBoards } from "./empty-boards";
 import { EmptyFavourites } from "./empty-favourites";
 import { EmptySearch } from "./empty-search";
-import { api } from "@/convex/_generated/api";
-import BoardCard from "./board-card";
+import BoardCard, { BoardCardSkeleton } from "./board-card";
 import NewBoardButton from "./new-board-button";
 
 interface BoardListProps {
   orgId: string;
+  userId: string;
   query: {
     search?: string;
     favourites?: string;
   };
 }
 
-export const BoardList = ({ orgId, query }: BoardListProps) => {
-  const data = useQuery(api.boards.get, { orgId, ...query });
+const gridClass =
+  "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10";
 
-    if (data === undefined) {
-    return (
-      <div className="text-3xl">
-        <h2>{query.favourites ? "Favourite" : "Team"} whiteboards</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10">
-            <NewBoardButton orgId={orgId} disabled />
-            <BoardCard.Skeleton />
-            <BoardCard.Skeleton />
-            <BoardCard.Skeleton />
-            <BoardCard.Skeleton />
-        </div>
-      </div>
-    );
-  }
+export const BoardList = async ({ orgId, userId, query }: BoardListProps) => {
+  const data = await getBoards(orgId, userId, {
+    search: query.search,
+    favourites: !!query.favourites,
+  });
 
-  if (!data?.length && query.search) {
-    return <EmptySearch />;
-  }
-
-  if (!data?.length && query.favourites) {
-    return <EmptyFavourites />;
-  }
-
-  if (!data?.length) {
-    return <EmptyBoards />;
-  }
+  if (!data.length && query.search) return <EmptySearch />;
+  if (!data.length && query.favourites) return <EmptyFavourites />;
+  if (!data.length) return <EmptyBoards orgId={orgId} />;
 
   return (
     <div className="text-3xl">
       <h2>{query.favourites ? "Favourite" : "Team"} whiteboards</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5 mt-8 pb-10">
+      <div className={gridClass}>
         <NewBoardButton orgId={orgId} />
-        {data?.map((board) => (
+        {data.map((board) => (
           <BoardCard
-            key={board._id}
-            id={board._id}
+            key={board.id}
+            id={board.id}
             title={board.title}
             authorId={board.authorId}
             imageUrl={board.imageUrl}
             authorName={board.authorName}
-            createdAt={board._creationTime}
+            createdAt={board.createdAt}
             orgId={board.orgId}
             isFavourite={board.isFavourite}
+            currentUserId={userId}
           />
         ))}
       </div>
     </div>
   );
 };
+
+export const BoardListSkeleton = ({
+  orgId,
+  favourites,
+}: {
+  orgId: string;
+  favourites?: boolean;
+}) => (
+  <div className="text-3xl">
+    <h2>{favourites ? "Favourite" : "Team"} whiteboards</h2>
+    <div className={gridClass}>
+      <NewBoardButton orgId={orgId} disabled />
+      <BoardCardSkeleton />
+      <BoardCardSkeleton />
+      <BoardCardSkeleton />
+      <BoardCardSkeleton />
+    </div>
+  </div>
+);

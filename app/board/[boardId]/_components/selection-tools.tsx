@@ -72,11 +72,12 @@ export const SelectionTools = memo(
       return null;
     }
 
-    const x = selectionBounds.width / 2 + selectionBounds.x + camera.x;
-    const y = selectionBounds.y + camera.y;
+    const zoom = camera.zoom || 1;
+    const x = (selectionBounds.x + selectionBounds.width / 2) * zoom + camera.x;
+    const y = selectionBounds.y * zoom + camera.y;
 
     return (
-        <div className="absolute p-3 rounded-xl bg-white shadow-sm border flex select-none"
+        <div className="absolute p-3 rounded-xl bg-white dark:bg-neutral-800 dark:text-neutral-100 dark:border-neutral-700 shadow-sm border flex select-none"
             style={{
                 transform: `translate(
                     calc(${x}px - 50%),

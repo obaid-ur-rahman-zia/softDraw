@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/convex/_generated/api";
+import { createBoard } from "@/app/actions/board";
 import { useApiMutation } from "@/hooks/use-api-mutation";
 import { cn } from "@/lib/utils";
 import { Plus } from "lucide-react";
@@ -15,7 +15,7 @@ interface NewBoardButtonProps {
 const NewBoardButton = ({ orgId, disabled }: NewBoardButtonProps) => {
 
     const router = useRouter()
-    const { mutate, pending } = useApiMutation(api.board.create)
+    const { mutate, pending } = useApiMutation(createBoard)
 
     const onClick = () => {
         mutate({

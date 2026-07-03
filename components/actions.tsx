@@ -10,7 +10,7 @@ import {
 import { Link2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useApiMutation } from "@/hooks/use-api-mutation";
-import { api } from "@/convex/_generated/api";
+import { removeBoard } from "@/app/actions/board";
 import { ConfirmModal } from "./confirm-modal";
 import { Button } from "./ui/button";
 import { useRenameModal } from "@/store/use-rename-modal";
@@ -30,7 +30,7 @@ export const Actions = ({
   side,
   sideOffset,
 }: ActionsProps) => {
-  const { mutate, pending } = useApiMutation(api.board.remove);
+  const { mutate, pending } = useApiMutation(removeBoard);
   const { onOpen } = useRenameModal()
 
 

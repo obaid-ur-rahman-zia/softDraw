@@ -1,17 +1,12 @@
 import { textFont } from "@/lib/constants";
-import { cn, colorToCss } from "@/lib/utils";
-import { useMutation } from "@/liveblocks.config";
+import { cn } from "@/lib/utils";
+import { fontFamilyClass, resolveStroke } from "@/lib/style";
 import { TextLayer } from "@/types/canvas";
 import ContentEditable, { ContentEditableEvent } from "react-contenteditable";
 
-
 const calculateFontSize = (width: number, height: number) => {
-  const maxFontSize = 1000;
   const scaleFactor = 0.5;
-  const fontSizeBasedOnHeight = height * scaleFactor;
-  const fontSizeBasedOnWidth = width * scaleFactor;
-
-  return Math.min(fontSizeBasedOnHeight, fontSizeBasedOnWidth, maxFontSize);
+  return Math.min(height * scaleFactor, width * scaleFactor, 1000);
 };
 
 interface TextProps {
@@ -19,6 +14,7 @@ interface TextProps {
   layer: TextLayer;
   onPointerDown: (e: React.PointerEvent, id: string) => void;
   selectionColor?: string;
+  onValueChange?: (value: string) => void;
 }
 
 export const Text = ({
@@ -26,21 +22,25 @@ export const Text = ({
   layer,
   selectionColor,
   onPointerDown,
+  onValueChange,
 }: TextProps) => {
-  const { x, y, width, height, fill, value } = layer;
+  const { x, y, width, height, value } = layer;
+  const size = layer.fontSize ?? calculateFontSize(width, height);
+  const color = resolveStroke(layer);
+  const align = layer.textAlign ?? "center";
+  const justify =
+    align === "left"
+      ? "justify-start text-left"
+      : align === "right"
+        ? "justify-end text-right"
+        : "justify-center text-center";
+  const fontCls =
+    !layer.fontFamily || layer.fontFamily === "hand"
+      ? textFont.className
+      : fontFamilyClass(layer.fontFamily);
 
-    const updateValue = useMutation((
-        {storage},
-        newValue: string
-    ) => {
-        const liveLayers = storage.get("layers");
-
-        liveLayers.get(id)?.set("value", newValue)
-    }, [])
-
-    const handleContentChange = (e: ContentEditableEvent) => {
-        updateValue(e.target.value)
-    }
+  const handleContentChange = (e: ContentEditableEvent) =>
+    onValueChange?.(e.target.value);
 
   return (
     <foreignObject
@@ -49,6 +49,7 @@ export const Text = ({
       width={width}
       height={height}
       onPointerDown={(e) => onPointerDown(e, id)}
+      opacity={(layer.opacity ?? 100) / 100}
       style={{
         outline: selectionColor ? `1px solid ${selectionColor}` : "none",
       }}
@@ -56,14 +57,13 @@ export const Text = ({
       <ContentEditable
         html={value || "Text"}
         onChange={handleContentChange}
+        disabled={!onValueChange}
         className={cn(
-          "w-full h-full flex items-center justify-center text-center drop-shadow-md outline-none",
-          textFont.className
+          "w-full h-full flex items-center drop-shadow-md outline-none select-none focus:select-text",
+          justify,
+          fontCls
         )}
-        style={{
-          fontSize: calculateFontSize(width, height),
-          color: fill ? colorToCss(fill) : "#000",
-        }}
+        style={{ fontSize: size, color }}
       />
     </foreignObject>
   );

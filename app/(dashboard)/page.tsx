@@ -1,26 +1,39 @@
-"use client";
-
-import React from "react";
+import { Suspense } from "react";
 import EmptyOrg from "./_components/empty-org";
-import { useOrganization } from "@clerk/nextjs";
-import { BoardList } from "./_components/board-list";
+import { BoardList, BoardListSkeleton } from "./_components/board-list";
+import { getActiveContext } from "@/lib/queries";
 
 interface DashboardPageProps {
-  searchParams: {
+  searchParams: Promise<{
     search?: string;
     favourites?: string;
-  };
+  }>;
 }
 
-const DashboardPage = ({ searchParams }: DashboardPageProps) => {
-  const { organization } = useOrganization();
+const DashboardPage = async ({ searchParams }: DashboardPageProps) => {
+  const ctx = await getActiveContext();
+  const params = await searchParams;
 
   return (
     <div className="flex-1 h-[calc(100%-80px)] p-6">
-      {!organization ? (
+      {!ctx?.activeOrg ? (
         <EmptyOrg />
       ) : (
-        <BoardList orgId={organization.id} query={searchParams} />
+        <Suspense
+          key={JSON.stringify(params)}
+          fallback={
+            <BoardListSkeleton
+              orgId={ctx.activeOrg.id}
+              favourites={!!params.favourites}
+            />
+          }
+        >
+          <BoardList
+            orgId={ctx.activeOrg.id}
+            userId={ctx.user.id}
+            query={params}
+          />
+        </Suspense>
       )}
     </div>
   );

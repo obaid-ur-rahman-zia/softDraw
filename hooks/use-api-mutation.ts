@@ -1,26 +1,19 @@
-import { useMutation } from "convex/react";
-import { useState } from "react"
+import { useState } from "react";
 
+/**
+ * Wraps an async server action, exposing `{ mutate, pending }`.
+ * Drop-in replacement for the old Convex-backed hook — call sites keep
+ * `const { mutate, pending } = useApiMutation(someServerAction)`.
+ */
+export const useApiMutation = <TArgs, TResult>(
+  action: (args: TArgs) => Promise<TResult>
+) => {
+  const [pending, setPending] = useState(false);
 
-export const useApiMutation = (mutationFunction: any) => {
-    const [pending, setPending] = useState(false);
-    const apiMutation = useMutation(mutationFunction);
+  const mutate = (payload: TArgs): Promise<TResult> => {
+    setPending(true);
+    return action(payload).finally(() => setPending(false));
+  };
 
-    const mutate = (payload: any) => {
-        setPending(true);
-
-        return apiMutation(payload)
-            .finally(() => setPending(false))
-            .then((result) => {
-                return result;
-            })
-            .catch((error) => {
-                throw error;
-            })
-    }
-
-    return {
-        mutate,
-        pending
-    }
-}
+  return { mutate, pending };
+};

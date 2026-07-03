@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Info from "./info";
 import Participants from "./participants";
 import Toolbar from "./toolbar";
@@ -9,6 +9,9 @@ import {
   CanvasMode,
   CanvasState,
   Color,
+  InsertableLayerType,
+  Layer,
+  LayerType,
   Point,
   Side,
   XYWH,
@@ -24,30 +27,52 @@ import {
 } from "@/liveblocks.config";
 import { CursorsPresence } from "./cursors-presence";
 import {
+  boundsFromDrag,
   colorToCss,
   connectionIdToColor,
+  finalInsertBounds,
   findIntersectingLayersWithRectangle,
   penPointsToPathLayer,
+  pointInLayer,
+  pointInPolygon,
   pointerEventToCanvasPoint,
   resizeBounds,
+  zoomCamera,
 } from "@/lib/utils";
-import { LayerType } from "../../../../types/canvas";
 import { LiveObject } from "@liveblocks/client";
 import { nanoid } from "nanoid";
 import { LayerPreview } from "./layer-preview";
+import { LayerRenderer } from "./layer-renderer";
 import { SelectionBox } from "./selection-box";
 import { SelectionTools } from "./selection-tools";
 import { Path } from "./path";
 import { useDisableScrollBounce } from "@/hooks/use-disable-scroll-bounce";
 import { useDeleteLayers } from "@/hooks/use-delete-layers";
+import { takeImport } from "@/lib/guest-handoff";
+import { AiFlowchartDialog } from "@/components/ai/ai-flowchart-dialog";
+import type { PositionedLayer } from "@/lib/flowchart-layout";
+import { BottomBar } from "@/components/canvas/bottom-bar";
+import {
+  PropertiesPanel,
+  type StyleTarget,
+} from "@/components/canvas/properties-panel";
+import { DEFAULT_STYLE } from "@/lib/style";
+import type { LayerStyle } from "@/types/canvas";
+import { CanvasMenu } from "@/components/canvas/canvas-menu";
+import { exportPng, exportSvg } from "@/lib/canvas-export";
+import { useTheme } from "next-themes";
+import { OnboardingTour } from "@/components/canvas/onboarding-tour";
+import { MoreToolsMenu } from "@/components/canvas/more-tools-menu";
+import { HandDrawController } from "@/components/canvas/hand-draw";
 
 interface CanvasProps {
   boardId: string;
+  boardTitle: string;
 }
 
 const MAX_LAYERS = 100;
 
-const Canvas = ({ boardId }: CanvasProps) => {
+const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
   const layerIds = useStorage((root) => root.layerIds);
 
   const pencilDraft = useSelf((me) => me.presence.pencilDraft)
@@ -56,12 +81,65 @@ const Canvas = ({ boardId }: CanvasProps) => {
     mode: CanvasMode.None,
   });
 
-  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0 });
+  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const [lastUsedColor, setLastUsedColor] = useState<Color>({
     r: 0,
     g: 0,
     b: 0,
   });
+
+  // Keep the active tool selected after drawing (Excalidraw's lock).
+  const [locked, setLocked] = useState(false);
+
+  // Current style applied to new shapes (Excalidraw-style sticky styling).
+  const [style, setStyle] = useState<LayerStyle>(DEFAULT_STYLE);
+
+  const mySelection = useSelf((me) => me.presence.selection);
+  const selectedLayer = useStorage((root) => {
+    const id = mySelection?.[0];
+    return id ? (root.layers.get(id) ?? null) : null;
+  });
+
+  // Flip the default drawing colour with the theme (only while untouched).
+  const { resolvedTheme } = useTheme();
+  useEffect(() => {
+    setLastUsedColor((c) => {
+      const isDefault =
+        (c.r === 0 && c.g === 0 && c.b === 0) ||
+        (c.r === 255 && c.g === 255 && c.b === 255);
+      if (!isDefault) return c;
+      return resolvedTheme === "dark"
+        ? { r: 255, g: 255, b: 255 }
+        : { r: 0, g: 0, b: 0 };
+    });
+  }, [resolvedTheme]);
+
+  // Excalidraw-style drag-to-draw draft for the shape being placed.
+  const [shapeDraft, setShapeDraft] = useState<{
+    layerType: InsertableLayerType;
+    origin: Point;
+    current: Point;
+  } | null>(null);
+
+  const [bgColor, setBgColor] = useState("");
+  const [laserTrail, setLaserTrail] = useState<
+    { x: number; y: number; t: number }[]
+  >([]);
+  const [handMode, setHandMode] = useState(false);
+  const [handCursor, setHandCursor] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const prevPinchRef = useRef(false);
+
+  const containerRef = useRef<HTMLElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const panRef = useRef<{
+    startX: number;
+    startY: number;
+    camX: number;
+    camY: number;
+  } | null>(null);
+  const spaceRef = useRef(false);
 
  
 
@@ -73,12 +151,8 @@ const Canvas = ({ boardId }: CanvasProps) => {
   const insertLayer = useMutation(
     (
       { storage, setMyPresence },
-      layerType:
-        | LayerType.Ellipse
-        | LayerType.Rectangle
-        | LayerType.Note
-        | LayerType.Text,
-      position: Point
+      layerType: InsertableLayerType,
+      bounds: XYWH
     ) => {
       const liveLayers = storage.get("layers");
 
@@ -88,23 +162,154 @@ const Canvas = ({ boardId }: CanvasProps) => {
 
       const liveLayerIds = storage.get("layerIds");
       const layerId = nanoid();
-      const layer = new LiveObject({
+      const layer = new LiveObject<Layer>({
         type: layerType,
-        x: position.x,
-        y: position.y,
-        height: 100,
-        width: 100,
-        fill: lastUsedColor,
-      });
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        ...style,
+        fill: style.stroke ?? lastUsedColor,
+      } as Layer);
 
       liveLayerIds.push(layerId);
       liveLayers.set(layerId, layer);
 
       setMyPresence({ selection: [layerId] }, { addToHistory: true });
-      setCanvasState({ mode: CanvasMode.None });
     },
-    [lastUsedColor]
+    [lastUsedColor, style]
   );
+
+  // Apply a style change to all currently-selected layers.
+  const applyStyleToSelection = useMutation(
+    ({ storage, self }, partial: Partial<LayerStyle> & { fill?: Color }) => {
+      const liveLayers = storage.get("layers");
+      for (const id of self.presence.selection) {
+        liveLayers.get(id)?.update(partial as Partial<Layer>);
+      }
+    },
+    []
+  );
+
+  const insertEmbed = useMutation(
+    ({ storage, setMyPresence }, url: string, center: { x: number; y: number }) => {
+      const liveLayers = storage.get("layers");
+      if (liveLayers.size >= MAX_LAYERS) return;
+      const liveLayerIds = storage.get("layerIds");
+      const id = nanoid();
+      const w = 420;
+      const h = 300;
+      liveLayers.set(
+        id,
+        new LiveObject<Layer>({
+          type: LayerType.Embed,
+          x: center.x - w / 2,
+          y: center.y - h / 2,
+          width: w,
+          height: h,
+          fill: { r: 255, g: 255, b: 255 },
+          value: url,
+        } as Layer)
+      );
+      liveLayerIds.push(id);
+      setMyPresence({ selection: [id] }, { addToHistory: true });
+    },
+    []
+  );
+
+  const lassoSelect = useMutation(
+    ({ storage, setMyPresence }, poly: number[][]) => {
+      const liveLayers = storage.get("layers");
+      const ids: string[] = [];
+      for (const id of storage.get("layerIds").toImmutable()) {
+        const l = liveLayers.get(id);
+        if (!l) continue;
+        const cx = l.get("x") + l.get("width") / 2;
+        const cy = l.get("y") + l.get("height") / 2;
+        if (pointInPolygon(cx, cy, poly)) ids.push(id);
+      }
+      setMyPresence({ selection: ids }, { addToHistory: true });
+    },
+    []
+  );
+
+  const resetCanvas = useMutation(({ storage, setMyPresence }) => {
+    const liveLayers = storage.get("layers");
+    const liveLayerIds = storage.get("layerIds");
+    for (const id of liveLayerIds.toImmutable()) liveLayers.delete(id);
+    while (liveLayerIds.length > 0) liveLayerIds.delete(0);
+    setMyPresence({ selection: [] });
+  }, []);
+
+  const changeZOrder = useMutation(
+    ({ storage, self }, dir: "front" | "back" | "forward" | "backward") => {
+      const liveLayerIds = storage.get("layerIds");
+      const sel = new Set(self.presence.selection);
+      if (!sel.size) return;
+      const arr = liveLayerIds.toImmutable();
+      const n = arr.length;
+
+      if (dir === "front") {
+        const selected = arr.filter((id) => sel.has(id));
+        for (const id of selected) {
+          const from = liveLayerIds.indexOf(id);
+          if (from !== -1) liveLayerIds.move(from, n - 1);
+        }
+      } else if (dir === "back") {
+        const selected = arr.filter((id) => sel.has(id)).reverse();
+        for (const id of selected) {
+          const from = liveLayerIds.indexOf(id);
+          if (from !== -1) liveLayerIds.move(from, 0);
+        }
+      } else if (dir === "forward") {
+        for (let i = n - 2; i >= 0; i--) {
+          if (sel.has(arr[i]) && !sel.has(arr[i + 1])) {
+            const from = liveLayerIds.indexOf(arr[i]);
+            if (from !== -1 && from < n - 1) liveLayerIds.move(from, from + 1);
+          }
+        }
+      } else {
+        for (let i = 1; i < n; i++) {
+          if (sel.has(arr[i]) && !sel.has(arr[i - 1])) {
+            const from = liveLayerIds.indexOf(arr[i]);
+            if (from > 0) liveLayerIds.move(from, from - 1);
+          }
+        }
+      }
+    },
+    []
+  );
+
+  // Eraser: delete a specific layer, or the topmost layer under a point.
+  const eraseLayer = useMutation(({ storage }, id: string) => {
+    storage.get("layers").delete(id);
+    const ids = storage.get("layerIds");
+    const idx = ids.indexOf(id);
+    if (idx !== -1) ids.delete(idx);
+  }, []);
+
+  const eraseAtPoint = useMutation(({ storage }, point: Point) => {
+    const liveLayers = storage.get("layers");
+    const liveLayerIds = storage.get("layerIds");
+    const arr = liveLayerIds.toImmutable();
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const id = arr[i];
+      const layer = liveLayers.get(id);
+      if (!layer) continue;
+      const b = {
+        x: layer.get("x"),
+        y: layer.get("y"),
+        width: layer.get("width"),
+        height: layer.get("height"),
+      };
+      if (pointInLayer(point, b)) {
+        liveLayers.delete(id);
+        const idx = liveLayerIds.indexOf(id);
+        if (idx !== -1) liveLayerIds.delete(idx);
+        break;
+      }
+    }
+  }, []);
 
   const translateSelectedLayers = useMutation(
     ({ storage, self }, point: Point) => {
@@ -248,6 +453,52 @@ const Canvas = ({ boardId }: CanvasProps) => {
     [lastUsedColor]
   );
 
+  // Seed a newly-created board from a guest whiteboard handoff (localStorage).
+  const importGuestLayers = useMutation(
+    (
+      { storage },
+      snapshot: { layers: Record<string, Layer>; layerIds: string[] }
+    ) => {
+      const liveLayers = storage.get("layers");
+      const liveLayerIds = storage.get("layerIds");
+      if (liveLayerIds.length > 0) return; // never clobber an existing board
+
+      for (const id of snapshot.layerIds) {
+        const layer = snapshot.layers[id];
+        if (!layer) continue;
+        liveLayers.set(id, new LiveObject(layer));
+        liveLayerIds.push(id);
+      }
+    },
+    []
+  );
+
+  const importedRef = useRef(false);
+  useEffect(() => {
+    if (importedRef.current) return;
+    // Wait until Liveblocks storage is loaded (layerIds is null while loading),
+    // otherwise the mutation throws "storage has not been loaded".
+    if (layerIds == null) return;
+    importedRef.current = true;
+    const snapshot = takeImport(boardId);
+    if (snapshot) importGuestLayers(snapshot);
+  }, [boardId, importGuestLayers, layerIds]);
+
+  // Bulk-insert AI-generated flowchart layers.
+  const insertFlowchart = useMutation(
+    ({ storage, setMyPresence }, items: PositionedLayer[]) => {
+      const liveLayers = storage.get("layers");
+      const liveLayerIds = storage.get("layerIds");
+      for (const { id, layer } of items) {
+        if (liveLayers.size >= MAX_LAYERS) break;
+        liveLayers.set(id, new LiveObject(layer));
+        liveLayerIds.push(id);
+      }
+      setMyPresence({ selection: [] });
+    },
+    []
+  );
+
   const resizeSelectedLayer = useMutation(
     ({ storage, self }, point: Point) => {
       if (canvasState.mode !== CanvasMode.Resizing) {
@@ -282,16 +533,53 @@ const Canvas = ({ boardId }: CanvasProps) => {
     [history]
   );
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    setCamera((camera) => ({
-      x: camera.x - e.deltaX,
-      y: camera.y - e.deltaY,
-    }));
+  // Ctrl/⌘ + wheel zooms toward the cursor; plain wheel pans.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheelNative = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setCamera((cam) =>
+          zoomCamera(
+            cam,
+            { x: e.clientX, y: e.clientY },
+            cam.zoom * (1 - e.deltaY * 0.001)
+          )
+        );
+      } else {
+        setCamera((cam) => ({
+          ...cam,
+          x: cam.x - e.deltaX,
+          y: cam.y - e.deltaY,
+        }));
+      }
+    };
+    el.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => el.removeEventListener("wheel", onWheelNative);
+  }, []);
+
+  const zoomAtCenter = useCallback((factor: number, absolute?: number) => {
+    const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    setCamera((cam) => zoomCamera(cam, center, absolute ?? cam.zoom * factor));
   }, []);
 
   const onPointerMove = useMutation(
     ({ setMyPresence }, e: React.PointerEvent) => {
       e.preventDefault();
+
+      // Panning (hand tool or held space) — move the camera, skip everything else.
+      if (panRef.current) {
+        const { startX, startY, camX, camY } = panRef.current;
+        const cx = e.clientX;
+        const cy = e.clientY;
+        setCamera((cam) => ({
+          ...cam,
+          x: camX + (cx - startX),
+          y: camY + (cy - startY),
+        }));
+        return;
+      }
 
       const current = pointerEventToCanvasPoint(e, camera);
 
@@ -303,6 +591,22 @@ const Canvas = ({ boardId }: CanvasProps) => {
         translateSelectedLayers(current);
       } else if (canvasState.mode === CanvasMode.Resizing) {
         resizeSelectedLayer(current);
+      } else if (canvasState.mode === CanvasMode.Inserting) {
+        setShapeDraft((d) => (d ? { ...d, current } : d));
+      } else if (canvasState.mode === CanvasMode.Eraser) {
+        if (e.buttons === 1) eraseAtPoint(current);
+      } else if (canvasState.mode === CanvasMode.Laser) {
+        if (e.buttons === 1)
+          setLaserTrail((tr) => [
+            ...tr,
+            { x: current.x, y: current.y, t: Date.now() },
+          ]);
+      } else if (canvasState.mode === CanvasMode.Lasso) {
+        if (e.buttons === 1)
+          setCanvasState({
+            mode: CanvasMode.Lasso,
+            points: [...canvasState.points, [current.x, current.y]],
+          });
       } else if (canvasState.mode === CanvasMode.Pencil) {
         continueDrawing(current, e);
       }
@@ -317,6 +621,7 @@ const Canvas = ({ boardId }: CanvasProps) => {
       translateSelectedLayers,
       startMutliSelection,
       updateSelectionNet,
+      eraseAtPoint,
     ]
   );
 
@@ -326,9 +631,45 @@ const Canvas = ({ boardId }: CanvasProps) => {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // Pan with the hand tool, held space, or middle mouse button.
+      if (
+        canvasState.mode === CanvasMode.Hand ||
+        spaceRef.current ||
+        e.button === 1
+      ) {
+        panRef.current = {
+          startX: e.clientX,
+          startY: e.clientY,
+          camX: camera.x,
+          camY: camera.y,
+        };
+        return;
+      }
+
       const point = pointerEventToCanvasPoint(e, camera);
 
+      if (canvasState.mode === CanvasMode.Laser) {
+        setLaserTrail([{ x: point.x, y: point.y, t: Date.now() }]);
+        return;
+      }
+
+      if (canvasState.mode === CanvasMode.Lasso) {
+        setCanvasState({ mode: CanvasMode.Lasso, points: [[point.x, point.y]] });
+        return;
+      }
+
+      if (canvasState.mode === CanvasMode.Eraser) {
+        eraseAtPoint(point);
+        return;
+      }
+
       if (canvasState.mode === CanvasMode.Inserting) {
+        // Start dragging the shape out from this point.
+        setShapeDraft({
+          layerType: canvasState.layerType,
+          origin: point,
+          current: point,
+        });
         return;
       }
 
@@ -339,11 +680,17 @@ const Canvas = ({ boardId }: CanvasProps) => {
 
       setCanvasState({ origin: point, mode: CanvasMode.Pressing });
     },
-    [camera, canvasState, setCanvasState, startDrawing]
+    [camera, canvasState, setCanvasState, startDrawing, eraseAtPoint]
   );
 
   const onPointerUp = useMutation(
     ({}, e) => {
+      // End a pan gesture.
+      if (panRef.current) {
+        panRef.current = null;
+        return;
+      }
+
       const point = pointerEventToCanvasPoint(e, camera);
 
       if (
@@ -355,10 +702,25 @@ const Canvas = ({ boardId }: CanvasProps) => {
         setCanvasState({
           mode: CanvasMode.None,
         });
+      } else if (canvasState.mode === CanvasMode.Lasso) {
+        if (canvasState.points.length > 2) lassoSelect(canvasState.points);
+        setCanvasState({ mode: CanvasMode.None });
+      } else if (
+        canvasState.mode === CanvasMode.Hand ||
+        canvasState.mode === CanvasMode.Eraser ||
+        canvasState.mode === CanvasMode.Laser
+      ) {
+        // Tool stays selected; nothing to commit on pointer-up.
       } else if (canvasState.mode === CanvasMode.Pencil) {
         insertPath();
       } else if (canvasState.mode === CanvasMode.Inserting) {
-        insertLayer(canvasState.layerType, point);
+        const draft = shapeDraft;
+        const bounds = draft
+          ? finalInsertBounds(draft.layerType, draft.origin, draft.current)
+          : finalInsertBounds(canvasState.layerType, point, point);
+        insertLayer(canvasState.layerType, bounds);
+        setShapeDraft(null);
+        if (!locked) setCanvasState({ mode: CanvasMode.None });
       } else {
         setCanvasState({ mode: CanvasMode.None });
       }
@@ -373,6 +735,9 @@ const Canvas = ({ boardId }: CanvasProps) => {
       unselectLayers,
       insertPath,
       setCanvasState,
+      shapeDraft,
+      locked,
+      lassoSelect,
     ]
   );
 
@@ -383,6 +748,22 @@ const Canvas = ({ boardId }: CanvasProps) => {
       if (
         canvasState.mode === CanvasMode.Pencil ||
         canvasState.mode === CanvasMode.Inserting
+      ) {
+        return;
+      }
+
+      if (canvasState.mode === CanvasMode.Eraser) {
+        e.stopPropagation();
+        eraseLayer(layerId);
+        return;
+      }
+
+      // Hand / laser / lasso / space-pan: don't select individual layers.
+      if (
+        canvasState.mode === CanvasMode.Hand ||
+        canvasState.mode === CanvasMode.Laser ||
+        canvasState.mode === CanvasMode.Lasso ||
+        spaceRef.current
       ) {
         return;
       }
@@ -398,7 +779,7 @@ const Canvas = ({ boardId }: CanvasProps) => {
 
       setCanvasState({ mode: CanvasMode.Translating, current: point });
     },
-    [setCanvasState, history, camera, canvasState.mode]
+    [setCanvasState, history, camera, canvasState.mode, eraseLayer]
   );
 
   const layerIdsToColorSelection = useMemo(() => {
@@ -418,51 +799,241 @@ const Canvas = ({ boardId }: CanvasProps) => {
 
   const deleteLayers = useDeleteLayers()
 
-   useEffect(() => {
+  useEffect(() => {
+    const isEditing = (t: HTMLElement | null) =>
+      !!t &&
+      (t.isContentEditable ||
+        t.tagName === "INPUT" ||
+        t.tagName === "TEXTAREA");
+
+    const insert = (layerType: InsertableLayerType) =>
+      setCanvasState({ mode: CanvasMode.Inserting, layerType });
+
     function onKeyDown(e: KeyboardEvent) {
-      switch(e.key) {
+      if (isEditing(e.target as HTMLElement)) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        const k = e.key.toLowerCase();
+        if (k === "=" || k === "+") {
+          e.preventDefault();
+          zoomAtCenter(1.2);
+        } else if (k === "-") {
+          e.preventDefault();
+          zoomAtCenter(1 / 1.2);
+        } else if (k === "z") {
+          if (e.shiftKey) history.redo();
+          else history.undo();
+        } else if (k === "y") {
+          history.redo();
+        }
+        return;
+      }
+
+      switch (e.key) {
         case "Delete":
+        case "Backspace":
           deleteLayers();
           break;
-        case "z": {
-          if(e.ctrlKey || e.metaKey) {
-            if(e.shiftKey) {
-              history.redo()
-            } else {
-              history.undo()
-            }
-            break;
-          }
-        }
+        case " ":
+          spaceRef.current = true;
+          break;
+        case "1":
+        case "v":
+          setCanvasState({ mode: CanvasMode.None });
+          break;
+        case "h":
+          setCanvasState({ mode: CanvasMode.Hand });
+          break;
+        case "2":
+        case "r":
+          insert(LayerType.Rectangle);
+          break;
+        case "3":
+        case "d":
+          insert(LayerType.Diamond);
+          break;
+        case "4":
+        case "o":
+          insert(LayerType.Ellipse);
+          break;
+        case "5":
+        case "a":
+          insert(LayerType.Arrow);
+          break;
+        case "6":
+        case "l":
+          insert(LayerType.Line);
+          break;
+        case "7":
+        case "p":
+          setCanvasState({ mode: CanvasMode.Pencil });
+          break;
+        case "8":
+        case "t":
+          insert(LayerType.Text);
+          break;
+        case "9":
+          insert(LayerType.Note);
+          break;
+        case "0":
+        case "e":
+          setCanvasState({ mode: CanvasMode.Eraser });
+          break;
+        case "k":
+          setCanvasState({ mode: CanvasMode.Laser });
+          break;
+        case "f":
+          insert(LayerType.Frame);
+          break;
       }
     }
-    
 
-    document.addEventListener("keydown", onKeyDown)
-    
-    return () => {
-      document.removeEventListener("keydown", onKeyDown)
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === " ") {
+        spaceRef.current = false;
+        panRef.current = null;
+      }
     }
-    
-  }, [deleteLayers, history])
+
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+  }, [deleteLayers, history, setCanvasState, zoomAtCenter]);
+
+  // Fade + prune the laser trail while the laser tool is active.
+  useEffect(() => {
+    if (canvasState.mode !== CanvasMode.Laser) {
+      setLaserTrail((tr) => (tr.length ? [] : tr));
+      return;
+    }
+    const id = setInterval(() => {
+      setLaserTrail((tr) => {
+        if (!tr.length) return tr;
+        const now = Date.now();
+        const kept = tr.filter((p) => now - p.t < 700);
+        return kept.length === tr.length ? tr : kept;
+      });
+    }, 50);
+    return () => clearInterval(id);
+  }, [canvasState.mode]);
+
+  const panelTarget: StyleTarget | null = selectedLayer
+    ? (selectedLayer.type as StyleTarget)
+    : canvasState.mode === CanvasMode.Inserting
+      ? (canvasState.layerType as StyleTarget)
+      : canvasState.mode === CanvasMode.Pencil
+        ? "pencil"
+        : null;
+
+  const panelStyle: LayerStyle = selectedLayer
+    ? {
+        ...(selectedLayer as unknown as LayerStyle),
+        stroke: selectedLayer.stroke ?? selectedLayer.fill,
+      }
+    : style;
+
+  const onStyleChange = (partial: Partial<LayerStyle>) => {
+    setStyle((s) => ({ ...s, ...partial }));
+    // Keep the freehand/pencil colour in sync with the chosen stroke.
+    if (partial.stroke) setLastUsedColor(partial.stroke);
+    if (mySelection?.length) applyStyleToSelection(partial);
+  };
 
   return (
-    <main className="w-full h-full relative touch-none">
-            <div className="fixed inset-0 -z-10 h-full w-full bg-background dark:bg-[radial-gradient(#393e4a_1px,transparent_1px)] bg-[radial-gradient(#dadde2_1px,transparent_1px)] [background-size:16px_16px]"/>
-      <Info boardId={boardId} />
+    <main
+      ref={containerRef}
+      className="fixed inset-0 overflow-hidden touch-none select-none"
+    >
+            <div
+              className="fixed inset-0 -z-10 h-full w-full bg-background dark:bg-[radial-gradient(#393e4a_1px,transparent_1px)] bg-[radial-gradient(#dadde2_1px,transparent_1px)] [background-size:16px_16px]"
+              style={bgColor ? { backgroundColor: bgColor } : undefined}
+            />
+      <CanvasMenu
+        onExportPng={() => svgRef.current && exportPng(svgRef.current, bgColor || "#ffffff")}
+        onExportSvg={() => svgRef.current && exportSvg(svgRef.current)}
+        onReset={resetCanvas}
+        bgColor={bgColor || "#ffffff"}
+        setBgColor={setBgColor}
+        onInsert={insertFlowchart}
+        origin={() => ({
+          x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+          y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+        })}
+      />
+      <Info boardId={boardId} title={boardTitle} />
       <Participants />
       <Toolbar
         canvasState={canvasState}
         setCanvasState={setCanvasState}
-        canRedo={canRedo}
-        canUndo={canUndo}
-        undo={history.undo}
-        redo={history.redo}
+        locked={locked}
+        setLocked={setLocked}
+        moreMenu={
+          <MoreToolsMenu
+            canvasState={canvasState}
+            setCanvasState={setCanvasState}
+            onInsert={insertFlowchart}
+            origin={() => ({
+              x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+              y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+            })}
+            onEmbed={(url) =>
+              insertEmbed(url, {
+                x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+                y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+              })
+            }
+          />
+        }
       />
       <SelectionTools camera={camera} setLastUsedColor={setLastUsedColor} />
+      {panelTarget && (
+        <PropertiesPanel
+          target={panelTarget}
+          style={panelStyle}
+          onChange={onStyleChange}
+          hasSelection={!!mySelection?.length}
+          onZOrder={changeZOrder}
+        />
+      )}
+      <BottomBar
+        zoom={camera.zoom}
+        onZoomIn={() => zoomAtCenter(1.2)}
+        onZoomOut={() => zoomAtCenter(1 / 1.2)}
+        onZoomReset={() => zoomAtCenter(1, 1)}
+        undo={history.undo}
+        redo={history.redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
+      <div
+        data-tour="ai"
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
+      >
+        <AiFlowchartDialog
+          onInsert={insertFlowchart}
+          origin={() => ({
+            x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+            y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+          })}
+        />
+      </div>
+      <OnboardingTour />
       <svg
-        className="w-[100vw] h-[100vh]"
-        onWheel={onWheel}
+        ref={svgRef}
+        className="w-full h-full"
+        style={{
+          cursor:
+            canvasState.mode === CanvasMode.Hand
+              ? "grab"
+              : canvasState.mode === CanvasMode.Eraser ||
+                  canvasState.mode === CanvasMode.Laser ||
+                  canvasState.mode === CanvasMode.Lasso
+                ? "crosshair"
+                : "default",
+        }}
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerLeave}
         onPointerUp={onPointerUp}
@@ -470,7 +1041,7 @@ const Canvas = ({ boardId }: CanvasProps) => {
       >
         <g
           style={{
-            transform: `translate(${camera.x}px, ${camera.y}px)`,
+            transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`,
           }}
         >
           {layerIds?.map((layerId) => (
@@ -493,14 +1064,55 @@ const Canvas = ({ boardId }: CanvasProps) => {
               />
             )}
           <CursorsPresence />
+            {shapeDraft && (
+              <LayerRenderer
+                id="shape-preview"
+                layer={
+                  {
+                    type: shapeDraft.layerType,
+                    ...boundsFromDrag(
+                      shapeDraft.layerType,
+                      shapeDraft.origin,
+                      shapeDraft.current
+                    ),
+                    fill: lastUsedColor,
+                  } as Layer
+                }
+                onLayerPointerDown={() => {}}
+              />
+            )}
             {pencilDraft != null && pencilDraft.length > 0 && (
-              <Path 
+              <Path
               points={pencilDraft}
               fill={colorToCss(lastUsedColor)}
               x={0}
               y={0}
               />
             )}
+            {laserTrail.map((p, i) =>
+              i === 0 ? null : (
+                <line
+                  key={i}
+                  x1={laserTrail[i - 1].x}
+                  y1={laserTrail[i - 1].y}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke="#ef4444"
+                  strokeWidth={5 / camera.zoom}
+                  strokeLinecap="round"
+                  strokeOpacity={Math.max(0, 1 - (Date.now() - p.t) / 700)}
+                />
+              )
+            )}
+            {canvasState.mode === CanvasMode.Lasso &&
+              canvasState.points.length > 1 && (
+                <polygon
+                  points={canvasState.points.map((p) => p.join(",")).join(" ")}
+                  className="fill-blue-500/10 stroke-blue-500"
+                  strokeWidth={1.5 / camera.zoom}
+                  strokeDasharray={`${4 / camera.zoom} ${3 / camera.zoom}`}
+                />
+              )}
         </g>
       </svg>
     </main>

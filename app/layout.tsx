@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { APP } from "@/lib/constants";
-import { ConvexClientProvider } from "@/providers/convex-client-provider";
+import { AuthSessionProvider } from "@/providers/session-provider";
+import { ThemeProvider } from "@/providers/theme-provider";
 import { Toaster } from "sonner";
 import { ModalProvider } from "@/providers/modal-provider";
 
@@ -81,9 +82,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} antialiased`}>
-        <ConvexClientProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+        <AuthSessionProvider>
           <Toaster />
           <ModalProvider />
           {children}
@@ -99,7 +106,8 @@ export default function RootLayout({
             }),
           }}
         />
-        </ConvexClientProvider>
+        </AuthSessionProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

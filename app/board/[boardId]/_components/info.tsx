@@ -3,12 +3,9 @@
 import { Actions } from "@/components/actions";
 import { Hint } from "@/components/hint";
 import { Button } from "@/components/ui/button";
-import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
 import { APP } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useRenameModal } from "@/store/use-rename-modal";
-import { useQuery } from "convex/react";
 import { Menu } from "lucide-react";
 import { Poppins } from "next/font/google";
 import Image from "next/image";
@@ -16,6 +13,7 @@ import Link from "next/link";
 
 interface InfoProps {
   boardId: string;
+  title: string;
 }
 
 const font = Poppins({
@@ -27,26 +25,18 @@ const TabSeparator = () => {
   return <div className="text-neutral-300 px-1.5">|</div>;
 };
 
-const Info = ({ boardId }: InfoProps) => {
+const Info = ({ boardId, title }: InfoProps) => {
   const { onOpen } = useRenameModal();
 
-  const data = useQuery(api.board.get, {
-    id: boardId as Id<"boards">,
-  });
-
-  if (!data) {
-    return <InfoSkeleton />;
-  }
-
   return (
-    <div className="top-2 absolute left-2 bg-white rounded-md px-1.5 h-12 flex items-center shadow-md">
+    <div className="top-2 absolute left-16 bg-white dark:bg-neutral-800 rounded-md px-1.5 h-12 flex items-center shadow-md">
       <Hint label="Go to whiteboards" side="bottom" sideOffset={10}>
         <Button asChild variant={"board"} className="px-2">
           <Link href={"/"}>
             <Image src={"/logo.svg"} alt="Logo" width={40} height={40} />
             <span
               className={cn(
-                "font-semibold text-xl ml-2 text-black",
+                "font-semibold text-xl ml-2 text-black dark:text-white",
                 font.className
               )}
             >
@@ -60,24 +50,15 @@ const Info = ({ boardId }: InfoProps) => {
         <Button
           className="text-base font-normal px-2"
           variant={"board"}
-          onClick={() => onOpen(data._id, data.title)}
+          onClick={() => onOpen(boardId, title)}
         >
-          {data.title}
+          {title}
         </Button>
       </Hint>
-      <TabSeparator/>
-      <Actions
-        id={data._id}
-        title={data.title}
-        side="bottom"
-        sideOffset={10}
-      >
+      <TabSeparator />
+      <Actions id={boardId} title={title} side="bottom" sideOffset={10}>
         <div>
-          <Hint
-            label="Main menu"
-            side="bottom"
-            sideOffset={10}
-          >
+          <Hint label="Main menu" side="bottom" sideOffset={10}>
             <Button size={"icon"} variant={"board"}>
               <Menu />
             </Button>

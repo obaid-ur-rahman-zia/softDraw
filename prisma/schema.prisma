@@ -1,0 +1,152 @@
+// SoftDraw Prisma schema — NextAuth (Auth.js v5) + Teams/Organizations + Boards
+// Canvas layer content stays in Liveblocks storage; this DB holds identity,
+// team membership, and board metadata (board.id == Liveblocks room id).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ── Auth.js core models ──────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String? // set for Credentials sign-in; null for pure OAuth users
+  activeOrgId   String? // last-selected organization (drives dashboard scope)
+  createdAt     DateTime  @default(now())
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships Membership[]
+  favourites  Favourite[]
+  invitesSent Invitation[] @relation("InvitedBy")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Teams / Organizations ────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  imageUrl  String?
+  createdAt DateTime @default(now())
+
+  memberships Membership[]
+  boards      Board[]
+  invitations Invitation[]
+  favourites  Favourite[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  orgId     String
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+}
+
+model Invitation {
+  id          String   @id @default(cuid())
+  orgId       String
+  email       String
+  role        Role     @default(MEMBER)
+  token       String   @unique
+  invitedById String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy User?        @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([email])
+}
+
+// ── Boards ───────────────────────────────────────────────────────────
+
+model Board {
+  id         String   @id @default(cuid())
+  title      String
+  orgId      String
+  authorId   String // snapshot of creator's user id
+  authorName String // snapshot of creator's name at creation time
+  imageUrl   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  favourites Favourite[]
+
+  @@index([orgId])
+}
+
+model Favourite {
+  id        String   @id @default(cuid())
+  userId    String
+  orgId     String
+  boardId   String
+  createdAt DateTime @default(now())
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  board Board        @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, boardId])
+  @@index([boardId])
+  @@index([userId, orgId])
+}

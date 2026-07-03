@@ -5,32 +5,65 @@ import {
   Square,
   StickyNote,
   Type,
-  Undo2,
-  Redo2,
+  Diamond,
+  Triangle,
+  Star,
+  Minus,
+  ArrowRight,
+  Hand,
+  Eraser,
+  Lock,
+  LockOpen,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { ToolButton } from "./tool-button";
 import { CanvasMode, CanvasState, LayerType } from "@/types/canvas";
 
 interface ToolbarProps {
   canvasState: CanvasState;
   setCanvasState: (newState: CanvasState) => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
+  locked: boolean;
+  setLocked: (locked: boolean) => void;
+  moreMenu?: ReactNode;
 }
+
+const Divider = () => (
+  <div className="mx-1 h-6 w-px bg-neutral-200 dark:bg-neutral-700 shrink-0" />
+);
 
 const Toolbar = ({
   canvasState,
-  canRedo,
-  canUndo,
-  redo,
   setCanvasState,
-  undo,
+  locked,
+  setLocked,
+  moreMenu,
 }: ToolbarProps) => {
+  const isInserting = (type: LayerType) =>
+    canvasState.mode === CanvasMode.Inserting &&
+    canvasState.layerType === type;
+
   return (
-    <div className="absolute top-[50%] -translate-y-[50%] left-2 flex flex-col gap-y-4">
-      <div className="bg-white rounded-md p-1.5 flex gap-y-1 flex-col items-center shadow-md">
+    <div
+      data-tour="toolbar"
+      className="absolute top-2 left-1/2 -translate-x-1/2 z-10 max-w-[calc(100vw-6.5rem)]"
+    >
+      <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-lg p-1.5 flex items-center gap-x-0.5 shadow-md overflow-x-auto no-scrollbar">
+        <ToolButton
+          label={locked ? "Unlock (keep tool)" : "Keep selected tool active"}
+          icon={locked ? Lock : LockOpen}
+          onClick={() => setLocked(!locked)}
+          isActive={locked}
+          side="bottom"
+        />
+        <Divider />
+        <ToolButton
+          label="Hand (pan)"
+          icon={Hand}
+          onClick={() => setCanvasState({ mode: CanvasMode.Hand })}
+          isActive={canvasState.mode === CanvasMode.Hand}
+          side="bottom"
+          shortcut="H"
+        />
         <ToolButton
           label="Select"
           icon={MousePointer2}
@@ -42,6 +75,108 @@ const Toolbar = ({
             canvasState.mode === CanvasMode.SelectionNet ||
             canvasState.mode === CanvasMode.Resizing
           }
+          side="bottom"
+          shortcut="1"
+        />
+        <Divider />
+        <ToolButton
+          label="Rectangle"
+          icon={Square}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Rectangle,
+            })
+          }
+          isActive={isInserting(LayerType.Rectangle)}
+          side="bottom"
+          shortcut="2"
+        />
+        <ToolButton
+          label="Diamond"
+          icon={Diamond}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Diamond,
+            })
+          }
+          isActive={isInserting(LayerType.Diamond)}
+          side="bottom"
+          shortcut="3"
+        />
+        <ToolButton
+          label="Ellipse"
+          icon={Circle}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Ellipse,
+            })
+          }
+          isActive={isInserting(LayerType.Ellipse)}
+          side="bottom"
+          shortcut="4"
+        />
+        <ToolButton
+          label="Triangle"
+          icon={Triangle}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Triangle,
+            })
+          }
+          isActive={isInserting(LayerType.Triangle)}
+          side="bottom"
+        />
+        <ToolButton
+          label="Star"
+          icon={Star}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Star,
+            })
+          }
+          isActive={isInserting(LayerType.Star)}
+          side="bottom"
+        />
+        <Divider />
+        <ToolButton
+          label="Arrow"
+          icon={ArrowRight}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Arrow,
+            })
+          }
+          isActive={isInserting(LayerType.Arrow)}
+          side="bottom"
+          shortcut="5"
+        />
+        <ToolButton
+          label="Line"
+          icon={Minus}
+          onClick={() =>
+            setCanvasState({
+              mode: CanvasMode.Inserting,
+              layerType: LayerType.Line,
+            })
+          }
+          isActive={isInserting(LayerType.Line)}
+          side="bottom"
+          shortcut="6"
+        />
+        <Divider />
+        <ToolButton
+          label="Draw"
+          icon={Pencil}
+          onClick={() => setCanvasState({ mode: CanvasMode.Pencil })}
+          isActive={canvasState.mode === CanvasMode.Pencil}
+          side="bottom"
+          shortcut="7"
         />
         <ToolButton
           label="Text"
@@ -52,79 +187,38 @@ const Toolbar = ({
               layerType: LayerType.Text,
             })
           }
-          isActive={
-            canvasState.mode === CanvasMode.Inserting &&
-            canvasState.layerType === LayerType.Text
-          }
+          isActive={isInserting(LayerType.Text)}
+          side="bottom"
+          shortcut="8"
         />
         <ToolButton
           label="Sticky note"
           icon={StickyNote}
-          onClick={() => 
+          onClick={() =>
             setCanvasState({
               mode: CanvasMode.Inserting,
               layerType: LayerType.Note,
             })
           }
-          isActive={
-            canvasState.mode === CanvasMode.Inserting &&
-            canvasState.layerType === LayerType.Note
-          }
+          isActive={isInserting(LayerType.Note)}
+          side="bottom"
+          shortcut="9"
         />
+        <Divider />
         <ToolButton
-          label="Rectangle"
-          icon={Square}
-          onClick={() => 
-            setCanvasState({
-              mode: CanvasMode.Inserting,
-              layerType: LayerType.Rectangle,
-            })
-          }
-          isActive={
-            canvasState.mode === CanvasMode.Inserting &&
-            canvasState.layerType === LayerType.Rectangle
-          }
+          label="Eraser"
+          icon={Eraser}
+          onClick={() => setCanvasState({ mode: CanvasMode.Eraser })}
+          isActive={canvasState.mode === CanvasMode.Eraser}
+          side="bottom"
+          shortcut="0"
         />
-        <ToolButton
-          label="Ellipse"
-          icon={Circle}
-          onClick={() => 
-            setCanvasState({
-              mode: CanvasMode.Inserting,
-              layerType: LayerType.Ellipse,
-            })
-          }
-          isActive={
-            canvasState.mode === CanvasMode.Inserting &&
-            canvasState.layerType === LayerType.Ellipse
-          }
-        />
-        <ToolButton
-          label="Pen"
-          icon={Pencil}
-          onClick={() => 
-            setCanvasState({
-              mode: CanvasMode.Pencil,
-            })
-          }
-          isActive={
-            canvasState.mode === CanvasMode.Pencil
-          }
-        />
-      </div>
-      <div className="bg-white rounded-md p-1.5 flex flex-col items-center shadow-md">
-        <ToolButton
-          label="Undo"
-          icon={Undo2}
-          onClick={undo}
-          isDisabled={!canUndo}
-        />
-        <ToolButton
-          label="Redo"
-          icon={Redo2}
-          onClick={redo}
-          isDisabled={!canRedo}
-        />
+        {moreMenu && (
+          <>
+            <Divider />
+            {moreMenu}
+          </>
+        )}
       </div>
     </div>
   );
@@ -134,6 +228,6 @@ export default Toolbar;
 
 export const ToolbarSkeleton = () => {
   return (
-    <div className="absolute top-[50%] -translate-y-[50%] left-2 flex flex-col gap-y-4 bg-white h-[360px] w-[52px] shadow-md rounded-md" />
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-white h-[52px] w-[600px] shadow-md rounded-lg" />
   );
 };

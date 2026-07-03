@@ -1,14 +1,8 @@
 "use client";
 
-import { useStorage } from "@/liveblocks.config";
-import { LayerType } from "@/types/canvas";
+import { useMutation, useStorage } from "@/liveblocks.config";
 import React, { memo } from "react";
-import { Rectangle } from "./rectangle";
-import { Ellipse } from "./ellipse";
-import { Text } from "./text";
-import { Note } from "./note";
-import { Path } from "./path";
-import { colorToCss } from "@/lib/utils";
+import { LayerRenderer } from "./layer-renderer";
 
 interface LayerPreviewProps {
   id: string;
@@ -20,64 +14,23 @@ export const LayerPreview = memo(
   ({ id, onLayerPointerDown, selectionColor }: LayerPreviewProps) => {
     const layer = useStorage((root) => root.layers.get(id));
 
+    const updateValue = useMutation(({ storage }, layerId: string, value: string) => {
+      storage.get("layers").get(layerId)?.set("value", value);
+    }, []);
+
     if (!layer) {
       return null;
     }
 
-    switch (layer.type) {
-      case LayerType.Path: 
-       return (
-        <Path
-            key={id}
-            points={layer.points}
-            onPointerDown={(e) => onLayerPointerDown(e, id)}
-            x={layer.x}
-            y={layer.y}
-            fill={layer.fill ? colorToCss(layer.fill) : "#000"}
-            stroke={selectionColor}
-          />
-       )
-      case LayerType.Note: 
-       return (
-        <Note
-            id={id}
-            layer={layer}
-            onPointerDown={onLayerPointerDown}
-            selectionColor={selectionColor}
-          />
-       )
-      case LayerType.Text: 
-       return (
-        <Text
-            id={id}
-            layer={layer}
-            onPointerDown={onLayerPointerDown}
-            selectionColor={selectionColor}
-          />
-       )
-      case LayerType.Ellipse: 
-       return (
-        <Ellipse
-            id={id}
-            layer={layer}
-            onPointerDown={onLayerPointerDown}
-            selectionColor={selectionColor}
-          />
-       )
-      case LayerType.Rectangle:
-        return (
-          <Rectangle
-            id={id}
-            layer={layer}
-            onPointerDown={onLayerPointerDown}
-            selectionColor={selectionColor}
-          />
-        );
-
-      default:
-        console.warn("Unknown Layer Type");
-        return null;
-    }
+    return (
+      <LayerRenderer
+        id={id}
+        layer={layer}
+        onLayerPointerDown={onLayerPointerDown}
+        selectionColor={selectionColor}
+        onValueChange={updateValue}
+      />
+    );
   }
 );
 

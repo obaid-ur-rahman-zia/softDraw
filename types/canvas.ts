@@ -10,6 +10,7 @@ export type Color = {
 export type Camera = {
     x: number;
     y: number;
+    zoom: number;
 }
 
 export enum LayerType {
@@ -18,58 +19,69 @@ export enum LayerType {
     Path,
     Text,
     Note,
+    // Appended (do not reorder — values are persisted in Liveblocks storage)
+    Diamond,
+    Triangle,
+    Star,
+    Line,
+    Arrow,
+    Frame,
+    Embed,
 }
 
-export type RectangleLayer = {
-    type: LayerType.Rectangle;
+export type FillStyle = "solid" | "hachure" | "cross-hatch";
+export type StrokeStyle = "solid" | "dashed" | "dotted";
+export type FontFamily = "hand" | "normal" | "code";
+export type TextAlign = "left" | "center" | "right";
+export type Arrowhead = "none" | "arrow" | "triangle";
+
+// Per-layer visual style (all optional so existing layers keep working).
+export type LayerStyle = {
+    fill?: Color;            // legacy primary colour (kept in sync with `stroke`)
+    stroke?: Color;          // outline / line / text colour (falls back to `fill`)
+    bgColor?: Color | null;  // fill colour for shapes; null/undefined = transparent
+    fillStyle?: FillStyle;
+    strokeWidth?: number;    // 1 | 2 | 4
+    strokeStyle?: StrokeStyle;
+    roughness?: number;      // 0 | 1 | 2 (hand-drawn look — Phase 3)
+    rounded?: boolean;       // sharp vs round edges
+    opacity?: number;        // 0 - 100
+    fontSize?: number;       // px
+    fontFamily?: FontFamily;
+    textAlign?: TextAlign;
+    arrowType?: "straight" | "elbow";
+    startArrowhead?: Arrowhead;
+    endArrowhead?: Arrowhead;
+};
+
+type Box = {
     x: number;
     y: number;
     height: number;
     width: number;
     fill: Color;
     value?: string;
-}
+} & LayerStyle;
 
-export type EllipseLayer = {
-    type: LayerType.Ellipse;
-    x: number;
-    y: number;
-    height: number;
-    width: number;
-    fill: Color;
-    value?: string;
-}
+export type RectangleLayer = { type: LayerType.Rectangle } & Box;
+export type EllipseLayer = { type: LayerType.Ellipse } & Box;
+export type PathLayer = { type: LayerType.Path; points: number[][] } & Box;
+export type TextLayer = { type: LayerType.Text } & Box;
+export type NoteLayer = { type: LayerType.Note } & Box;
 
-export type PathLayer = {
-    type: LayerType.Path;
-    x: number;
-    y: number;
-    height: number;
-    width: number;
-    fill: Color;
-    points: number[][];
-    value?: string;
-}
+// Bounding-box shapes (behave like Rectangle/Ellipse for select/resize/translate).
+export type DiamondLayer = { type: LayerType.Diamond } & Box;
+export type TriangleLayer = { type: LayerType.Triangle } & Box;
+export type StarLayer = { type: LayerType.Star } & Box;
 
-export type TextLayer = {
-    type: LayerType.Text;
-    x: number;
-    y: number;
-    height: number;
-    width: number;
-    fill: Color;
-    value?: string;
-}
+// Connectors: drawn from (x, y) to (x + width, y + height).
+export type LineLayer = { type: LayerType.Line } & Box;
+export type ArrowLayer = { type: LayerType.Arrow } & Box;
 
-export type NoteLayer = {
-    type: LayerType.Note;
-    x: number;
-    y: number;
-    height: number;
-    width: number;
-    fill: Color;
-    value?: string;
-}
+// A labelled container region (value = title).
+export type FrameLayer = { type: LayerType.Frame } & Box;
+// An embedded website (value = URL).
+export type EmbedLayer = { type: LayerType.Embed } & Box;
 
 export type Point = {
     x: number;
@@ -109,7 +121,7 @@ export type CanvasState =
     }
     | {
         mode: CanvasMode.Inserting,
-        layerType: LayerType.Ellipse | LayerType.Rectangle | LayerType.Text | LayerType.Note
+        layerType: InsertableLayerType
     }
     | {
         mode: CanvasMode.Resizing,
@@ -118,6 +130,19 @@ export type CanvasState =
     }
     | {
         mode: CanvasMode.Pencil
+    }
+    | {
+        mode: CanvasMode.Hand
+    }
+    | {
+        mode: CanvasMode.Eraser
+    }
+    | {
+        mode: CanvasMode.Laser
+    }
+    | {
+        mode: CanvasMode.Lasso,
+        points: number[][];
     }
 
 export enum CanvasMode {
@@ -128,6 +153,35 @@ export enum CanvasMode {
     Inserting,
     Resizing,
     Pencil,
+    Hand,
+    Eraser,
+    Laser,
+    Lasso,
 }
 
-export type Layer = RectangleLayer | EllipseLayer | PathLayer | TextLayer | NoteLayer
+// Layer types that can be placed via the toolbar's "Inserting" mode (Path is drawn, not inserted).
+export type InsertableLayerType =
+    | LayerType.Rectangle
+    | LayerType.Ellipse
+    | LayerType.Text
+    | LayerType.Note
+    | LayerType.Diamond
+    | LayerType.Triangle
+    | LayerType.Star
+    | LayerType.Line
+    | LayerType.Arrow
+    | LayerType.Frame;
+
+export type Layer =
+    | RectangleLayer
+    | EllipseLayer
+    | PathLayer
+    | TextLayer
+    | NoteLayer
+    | DiamondLayer
+    | TriangleLayer
+    | StarLayer
+    | LineLayer
+    | ArrowLayer
+    | FrameLayer
+    | EmbedLayer;
