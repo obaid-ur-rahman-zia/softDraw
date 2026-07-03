@@ -31,6 +31,8 @@ import {
   Frame as FrameIcon,
   Code2,
   Lasso,
+  Hand as HandIcon,
+  ScanLine,
 } from "lucide-react";
 
 interface MoreToolsMenuProps {
@@ -39,6 +41,8 @@ interface MoreToolsMenuProps {
   onInsert: (layers: PositionedLayer[]) => void;
   origin: () => { x: number; y: number };
   onEmbed: (url: string) => void;
+  onHandDraw?: () => void;
+  onWireframe?: () => void;
 }
 
 export function MoreToolsMenu({
@@ -47,6 +51,8 @@ export function MoreToolsMenu({
   onInsert,
   origin,
   onEmbed,
+  onHandDraw,
+  onWireframe,
 }: MoreToolsMenuProps) {
   const [aiOpen, setAiOpen] = useState(false);
   const [mermaidOpen, setMermaidOpen] = useState(false);
@@ -110,11 +116,27 @@ export function MoreToolsMenu({
             >
               <Lasso className="h-4 w-4 mr-2" /> Lasso selection
             </DropdownMenuItem>
+            {onHandDraw && (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={onHandDraw}
+              >
+                <HandIcon className="h-4 w-4 mr-2" /> Hand-gesture draw
+              </DropdownMenuItem>
+            )}
 
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-muted-foreground">
               Generate
             </DropdownMenuLabel>
+            {onWireframe && (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={onWireframe}
+              >
+                <ScanLine className="h-4 w-4 mr-2" /> Wireframe to code (AI)
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               className="cursor-pointer"
               onSelect={(e) => {

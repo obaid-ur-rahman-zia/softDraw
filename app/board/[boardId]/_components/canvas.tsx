@@ -59,11 +59,13 @@ import {
 import { DEFAULT_STYLE } from "@/lib/style";
 import type { LayerStyle } from "@/types/canvas";
 import { CanvasMenu } from "@/components/canvas/canvas-menu";
-import { exportPng, exportSvg } from "@/lib/canvas-export";
+import { exportPng, exportSvg, canvasToPngDataUrl } from "@/lib/canvas-export";
 import { useTheme } from "next-themes";
 import { OnboardingTour } from "@/components/canvas/onboarding-tour";
 import { MoreToolsMenu } from "@/components/canvas/more-tools-menu";
 import { HandDrawController } from "@/components/canvas/hand-draw";
+import { WireframeDialog } from "@/components/canvas/wireframe-dialog";
+import { recognizeStroke, buildRecognizedLayer } from "@/lib/beautify";
 
 interface CanvasProps {
   boardId: string;
@@ -129,6 +131,7 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
   const [handCursor, setHandCursor] = useState<{ x: number; y: number } | null>(
     null
   );
+  const [wireframeOpen, setWireframeOpen] = useState(false);
   const prevPinchRef = useRef(false);
 
   const containerRef = useRef<HTMLElement>(null);
@@ -451,6 +454,65 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
       });
     },
     [lastUsedColor]
+  );
+
+  // Append a point to the current freehand draft (used by hand-gesture drawing).
+  const handMove = useMutation(({ self, setMyPresence }, point: Point) => {
+    const { pencilDraft } = self.presence;
+    if (pencilDraft == null) return;
+    setMyPresence({
+      pencilDraft: [...pencilDraft, [point.x, point.y, 0.5]],
+    });
+  }, []);
+
+  // Finish a hand-drawn stroke: clean it up / snap to a shape, then insert.
+  const insertSmartPath = useMutation(
+    ({ storage, self, setMyPresence }) => {
+      const { pencilDraft } = self.presence;
+      const liveLayers = storage.get("layers");
+      if (
+        pencilDraft == null ||
+        pencilDraft.length < 2 ||
+        liveLayers.size >= MAX_LAYERS
+      ) {
+        setMyPresence({ pencilDraft: null });
+        return;
+      }
+      const desc = recognizeStroke(pencilDraft);
+      const layer = buildRecognizedLayer(desc, style, lastUsedColor);
+      const id = nanoid();
+      liveLayers.set(id, new LiveObject(layer));
+      storage.get("layerIds").push(id);
+      setMyPresence({ pencilDraft: null });
+    },
+    [style, lastUsedColor]
+  );
+
+  const handleHand = useCallback(
+    (screen: { x: number; y: number } | null, pinching: boolean) => {
+      if (!screen) {
+        if (prevPinchRef.current) {
+          insertSmartPath();
+          prevPinchRef.current = false;
+        }
+        setHandCursor(null);
+        return;
+      }
+      setHandCursor(screen);
+      const point = {
+        x: (screen.x - camera.x) / camera.zoom,
+        y: (screen.y - camera.y) / camera.zoom,
+      };
+      if (pinching && !prevPinchRef.current) {
+        startDrawing(point, 0.5);
+      } else if (pinching && prevPinchRef.current) {
+        handMove(point);
+      } else if (!pinching && prevPinchRef.current) {
+        insertSmartPath();
+      }
+      prevPinchRef.current = pinching;
+    },
+    [camera, startDrawing, handMove, insertSmartPath]
   );
 
   // Seed a newly-created board from a guest whiteboard handoff (localStorage).
@@ -985,6 +1047,8 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
                 y: (window.innerHeight / 2 - camera.y) / camera.zoom,
               })
             }
+            onHandDraw={() => setHandMode(true)}
+            onWireframe={() => setWireframeOpen(true)}
           />
         }
       />
@@ -1021,6 +1085,30 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
         />
       </div>
       <OnboardingTour />
+      {handMode && (
+        <HandDrawController
+          onHand={handleHand}
+          onClose={() => {
+            handleHand(null, false);
+            setHandMode(false);
+          }}
+        />
+      )}
+      {handMode && handCursor && (
+        <div
+          className="pointer-events-none fixed z-40 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-500/80 shadow"
+          style={{ left: handCursor.x, top: handCursor.y }}
+        />
+      )}
+      <WireframeDialog
+        open={wireframeOpen}
+        onOpenChange={setWireframeOpen}
+        capture={async () =>
+          svgRef.current
+            ? canvasToPngDataUrl(svgRef.current, bgColor || "#ffffff")
+            : null
+        }
+      />
       <svg
         ref={svgRef}
         className="w-full h-full"

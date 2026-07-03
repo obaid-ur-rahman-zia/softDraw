@@ -124,3 +124,66 @@ export async function generateFlowchart({
   if (!graph.nodes?.length) throw new Error("The model returned no nodes.");
   return graph;
 }
+
+const WIREFRAME_SYSTEM_PROMPT = `You are an expert front-end engineer. You receive a screenshot of a hand-drawn wireframe / sketch of a UI and turn it into clean, production-ready code.
+
+Rules:
+- Produce a SINGLE self-contained HTML document that uses Tailwind CSS via the CDN script <script src="https://cdn.tailwindcss.com"></script> in the <head>. No other external assets.
+- Faithfully reproduce the layout, sections, buttons, inputs, text, images (use placeholder blocks/labels), and overall hierarchy visible in the sketch.
+- Use sensible, modern styling: spacing, rounded corners, subtle borders/shadows, a coherent color palette. Make it look polished, not just boxes.
+- Use semantic HTML. Make it responsive with Tailwind utilities.
+- Return ONLY the raw HTML code. No markdown fences, no explanation.`;
+
+export async function wireframeToCode({
+  image,
+  hint,
+}: {
+  image: string;
+  hint?: string;
+}): Promise<string> {
+  await requireUser();
+
+  if (!image?.startsWith("data:image/")) {
+    throw new Error("A wireframe image is required.");
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "AI is not configured. Add OPENAI_API_KEY to your environment."
+    );
+  }
+
+  const client = new OpenAI({ apiKey });
+
+  const response = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: WIREFRAME_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: hint?.trim()
+              ? `Turn this wireframe into a working page. Extra context: ${hint.trim()}`
+              : "Turn this wireframe into a working page.",
+          },
+          { type: "image_url", image_url: { url: image, detail: "high" } },
+        ],
+      },
+    ],
+  });
+
+  const message = response.choices[0]?.message;
+  if (message?.refusal) throw new Error("The model declined this request.");
+  let code = message?.content?.trim();
+  if (!code) throw new Error("The model returned no code.");
+
+  // Strip accidental markdown fences.
+  code = code
+    .replace(/^```(?:html)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  return code;
+}

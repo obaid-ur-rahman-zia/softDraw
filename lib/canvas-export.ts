@@ -18,6 +18,19 @@ export async function exportPng(svg: SVGSVGElement, backgroundColor = "#ffffff")
   download(url, "softdraw.png");
 }
 
+/** Capture the current canvas view as a PNG data URL (no download). */
+export async function canvasToPngDataUrl(
+  svg: SVGSVGElement,
+  backgroundColor = "#ffffff"
+): Promise<string> {
+  return toPng(svg as unknown as HTMLElement, {
+    backgroundColor,
+    pixelRatio: 2,
+    width: svg.clientWidth || window.innerWidth,
+    height: svg.clientHeight || window.innerHeight,
+  });
+}
+
 /** Export the current canvas view as a standalone SVG file. */
 export function exportSvg(svg: SVGSVGElement) {
   const clone = svg.cloneNode(true) as SVGSVGElement;

@@ -32,6 +32,14 @@ const steps = [
     },
   },
   {
+    element: "[data-tour='more']",
+    popover: {
+      title: "More tools ✋",
+      description:
+        "Frames, web embeds, laser pointer, lasso — plus Hand-gesture draw: turn on your webcam and pinch your thumb + index finger to draw in the air. There's also Wireframe → code, which turns your sketch into a real HTML page.",
+    },
+  },
+  {
     element: "[data-tour='menu']",
     popover: {
       title: "Menu",

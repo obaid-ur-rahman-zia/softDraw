@@ -54,7 +54,10 @@ import { DEFAULT_STYLE } from "@/lib/style";
 import { CanvasMenu } from "@/components/canvas/canvas-menu";
 import { OnboardingTour } from "@/components/canvas/onboarding-tour";
 import { MoreToolsMenu } from "@/components/canvas/more-tools-menu";
-import { exportPng, exportSvg } from "@/lib/canvas-export";
+import { HandDrawController } from "@/components/canvas/hand-draw";
+import { WireframeDialog } from "@/components/canvas/wireframe-dialog";
+import { recognizeStroke, buildRecognizedLayer } from "@/lib/beautify";
+import { exportPng, exportSvg, canvasToPngDataUrl } from "@/lib/canvas-export";
 import { Trash2 } from "lucide-react";
 
 const MAX_LAYERS = 100;
@@ -102,6 +105,12 @@ export const GuestBoard = () => {
   const [locked, setLocked] = useState(false);
   const [style, setStyle] = useState<LayerStyle>(DEFAULT_STYLE);
   const [bgColor, setBgColor] = useState("#ffffff");
+  const [handMode, setHandMode] = useState(false);
+  const [handCursor, setHandCursor] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [wireframeOpen, setWireframeOpen] = useState(false);
+  const prevPinchRef = useRef(false);
   const historyPushed = useRef(false);
 
   useEffect(() => {
@@ -310,6 +319,54 @@ export const GuestBoard = () => {
     setPencilDraft(null);
     setCanvasState({ mode: CanvasMode.Pencil });
   }, [pencilDraft, lastUsedColor, mutate]);
+
+  // Finish a hand-drawn stroke: clean it up / snap to a shape, then insert.
+  const commitHandStroke = useCallback(
+    (draft: number[][] | null) => {
+      if (draft == null || draft.length < 2) {
+        setPencilDraft(null);
+        return;
+      }
+      const desc = recognizeStroke(draft);
+      const layer = buildRecognizedLayer(desc, style, lastUsedColor);
+      const id = nanoid();
+      mutate((prev) => ({
+        layers: { ...prev.layers, [id]: layer },
+        layerIds: [...prev.layerIds, id],
+      }));
+      setPencilDraft(null);
+    },
+    [style, lastUsedColor, mutate]
+  );
+
+  const handleHand = useCallback(
+    (screen: { x: number; y: number } | null, pinching: boolean) => {
+      if (!screen) {
+        if (prevPinchRef.current) {
+          commitHandStroke(pencilDraft);
+          prevPinchRef.current = false;
+        }
+        setHandCursor(null);
+        return;
+      }
+      setHandCursor(screen);
+      const point = {
+        x: (screen.x - camera.x) / camera.zoom,
+        y: (screen.y - camera.y) / camera.zoom,
+      };
+      if (pinching && !prevPinchRef.current) {
+        setPencilDraft([[point.x, point.y, 0.5]]);
+      } else if (pinching && prevPinchRef.current) {
+        setPencilDraft((prev) =>
+          prev ? [...prev, [point.x, point.y, 0.5]] : [[point.x, point.y, 0.5]]
+        );
+      } else if (!pinching && prevPinchRef.current) {
+        commitHandStroke(pencilDraft);
+      }
+      prevPinchRef.current = pinching;
+    },
+    [camera, commitHandStroke, pencilDraft]
+  );
 
   const deleteSelected = useCallback(() => {
     if (!selection.length) return;
@@ -879,7 +936,34 @@ export const GuestBoard = () => {
                 y: (window.innerHeight / 2 - camera.y) / camera.zoom,
               })
             }
+            onHandDraw={() => setHandMode(true)}
+            onWireframe={() => setWireframeOpen(true)}
           />
+        }
+      />
+
+      {handMode && (
+        <HandDrawController
+          onHand={handleHand}
+          onClose={() => {
+            handleHand(null, false);
+            setHandMode(false);
+          }}
+        />
+      )}
+      {handMode && handCursor && (
+        <div
+          className="pointer-events-none fixed z-40 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-500/80 shadow"
+          style={{ left: handCursor.x, top: handCursor.y }}
+        />
+      )}
+      <WireframeDialog
+        open={wireframeOpen}
+        onOpenChange={setWireframeOpen}
+        capture={async () =>
+          svgRef.current
+            ? canvasToPngDataUrl(svgRef.current, bgColor)
+            : null
         }
       />
 
