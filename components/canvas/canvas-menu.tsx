@@ -21,6 +21,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MermaidDialog } from "./mermaid-dialog";
@@ -42,6 +43,7 @@ interface CanvasMenuProps {
   setBgColor: (c: string) => void;
   onInsert: (layers: PositionedLayer[]) => void;
   origin: () => { x: number; y: number };
+  onPresent?: () => void;
 }
 
 export function CanvasMenu({
@@ -52,6 +54,7 @@ export function CanvasMenu({
   setBgColor,
   onInsert,
   origin,
+  onPresent,
 }: CanvasMenuProps) {
   const { theme, setTheme } = useTheme();
   const [mermaidOpen, setMermaidOpen] = useState(false);
@@ -85,6 +88,11 @@ export function CanvasMenu({
             >
               <Workflow className="h-4 w-4 mr-2" /> Mermaid to diagram
             </DropdownMenuItem>
+            {onPresent && (
+              <DropdownMenuItem className="cursor-pointer" onClick={onPresent}>
+                <Play className="h-4 w-4 mr-2" /> Present frames
+              </DropdownMenuItem>
+            )}
 
             <DropdownMenuSeparator />
             <ConfirmModal

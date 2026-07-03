@@ -7,6 +7,7 @@ import { Path, strokeWidthToSize } from "./path";
 import { RoughShape } from "./rough-shape";
 import { Frame } from "./frame";
 import { Embed } from "./embed";
+import { ImageShape } from "./image-layer";
 import { colorToCss } from "@/lib/utils";
 
 interface LayerRendererProps {
@@ -99,6 +100,15 @@ export const LayerRenderer = ({
     case LayerType.Embed:
       return (
         <Embed
+          id={id}
+          layer={layer}
+          onPointerDown={onLayerPointerDown}
+          selectionColor={selectionColor}
+        />
+      );
+    case LayerType.Image:
+      return (
+        <ImageShape
           id={id}
           layer={layer}
           onPointerDown={onLayerPointerDown}

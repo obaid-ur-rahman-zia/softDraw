@@ -58,7 +58,19 @@ import { HandDrawController } from "@/components/canvas/hand-draw";
 import { WireframeDialog } from "@/components/canvas/wireframe-dialog";
 import { recognizeStroke, buildRecognizedLayer } from "@/lib/beautify";
 import { CollaborationDialog } from "@/components/canvas/collaboration-dialog";
+import {
+  PresentationOverlay,
+  type Slide,
+} from "@/components/canvas/presentation";
 import { newGuestRoomId, setGuestName } from "@/lib/collab";
+import { requestTextFocus } from "@/lib/text-focus";
+import { usePinchZoom } from "@/hooks/use-pinch-zoom";
+import {
+  pickImageFile,
+  readImageFile,
+  imageBounds,
+  type LoadedImage,
+} from "@/lib/image-insert";
 import { Share2 } from "lucide-react";
 import { exportPng, exportSvg, canvasToPngDataUrl } from "@/lib/canvas-export";
 import { Trash2 } from "lucide-react";
@@ -114,6 +126,7 @@ export const GuestBoard = () => {
   );
   const [wireframeOpen, setWireframeOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
+  const [presenting, setPresenting] = useState(false);
   const prevPinchRef = useRef(false);
   const historyPushed = useRef(false);
 
@@ -137,6 +150,12 @@ export const GuestBoard = () => {
     camY: number;
   } | null>(null);
   const spaceRef = useRef(false);
+  const pinchingRef = useRef(false);
+
+  usePinchZoom(containerRef, setCamera, pinchingRef, () => {
+    setShapeDraft(null);
+    setPencilDraft(null);
+  });
 
   const { present, mutate, mutateLive, pushHistory } = board;
   const layerIds = present.layerIds;
@@ -175,9 +194,62 @@ export const GuestBoard = () => {
         layerIds: [...prev.layerIds, id],
       }));
       setSelection([id]);
+      if (layerType === LayerType.Text || layerType === LayerType.Note) {
+        requestTextFocus(id);
+      }
     },
     [layerIds.length, lastUsedColor, mutate, style]
   );
+
+  const canvasCenter = useCallback(
+    () => ({
+      x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+      y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+    }),
+    [camera]
+  );
+
+  const insertImage = useCallback(
+    (img: LoadedImage, center: { x: number; y: number }) => {
+      if (layerIds.length >= MAX_LAYERS) return;
+      const b = imageBounds(img, center);
+      const id = nanoid();
+      const layer = {
+        type: LayerType.Image,
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        fill: { r: 0, g: 0, b: 0 },
+        url: img.url,
+      } as Layer;
+      mutate((prev) => ({
+        layers: { ...prev.layers, [id]: layer },
+        layerIds: [...prev.layerIds, id],
+      }));
+      setSelection([id]);
+    },
+    [layerIds.length, mutate]
+  );
+
+  const onInsertImage = useCallback(async () => {
+    const img = await pickImageFile();
+    if (img) insertImage(img, canvasCenter());
+  }, [insertImage, canvasCenter]);
+
+  useEffect(() => {
+    const onPaste = async (e: ClipboardEvent) => {
+      const file = Array.from(e.clipboardData?.items ?? [])
+        .find((i) => i.type.startsWith("image/"))
+        ?.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      const img = await readImageFile(file);
+      insertImage(img, canvasCenter());
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [insertImage, canvasCenter]);
 
   const applyStyleToSelection = useCallback(
     (partial: Partial<LayerStyle> & { fill?: Color }) => {
@@ -523,6 +595,7 @@ export const GuestBoard = () => {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (pinchingRef.current) return;
       if (
         canvasState.mode === CanvasMode.Hand ||
         spaceRef.current ||
@@ -569,6 +642,8 @@ export const GuestBoard = () => {
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
+
+      if (pinchingRef.current) return;
 
       if (panRef.current) {
         const { startX, startY, camX, camY } = panRef.current;
@@ -879,6 +954,32 @@ export const GuestBoard = () => {
     if (selection.length) applyStyleToSelection(partial);
   };
 
+  // Frames = presentation slides, ordered top-to-bottom then left-to-right.
+  const slides = useMemo<Slide[]>(() => {
+    const out: Slide[] = [];
+    for (const id of present.layerIds) {
+      const l = present.layers[id];
+      if (l && l.type === LayerType.Frame) {
+        out.push({
+          id,
+          title: l.value,
+          bounds: { x: l.x, y: l.y, width: l.width, height: l.height },
+        });
+      }
+    }
+    return out.sort(
+      (a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x
+    );
+  }, [present.layers, present.layerIds]);
+
+  const startPresenting = () => {
+    if (!slides.length) {
+      toast.error("Add a Frame (press F) to present — each frame is a slide.");
+      return;
+    }
+    setPresenting(true);
+  };
+
   return (
     <main
       ref={containerRef}
@@ -889,6 +990,15 @@ export const GuestBoard = () => {
         style={{ backgroundColor: bgColor }}
       />
 
+      {presenting && (
+        <PresentationOverlay
+          slides={slides}
+          setCamera={setCamera}
+          onExit={() => setPresenting(false)}
+        />
+      )}
+      {!presenting && (
+      <>
       <CanvasMenu
         onExportPng={() => svgRef.current && exportPng(svgRef.current, bgColor)}
         onExportSvg={() => svgRef.current && exportSvg(svgRef.current)}
@@ -899,6 +1009,7 @@ export const GuestBoard = () => {
         bgColor={bgColor}
         setBgColor={setBgColor}
         onInsert={insertFlowchart}
+        onPresent={startPresenting}
         origin={() => ({
           x: (window.innerWidth / 2 - camera.x) / camera.zoom,
           y: (window.innerHeight / 2 - camera.y) / camera.zoom,
@@ -962,6 +1073,7 @@ export const GuestBoard = () => {
             }
             onHandDraw={() => setHandMode(true)}
             onWireframe={() => setWireframeOpen(true)}
+            onImage={onInsertImage}
           />
         }
       />
@@ -1048,6 +1160,8 @@ export const GuestBoard = () => {
             </Button>
           </div>
         </div>
+      )}
+      </>
       )}
 
       <svg

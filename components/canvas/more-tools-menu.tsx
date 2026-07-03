@@ -33,6 +33,7 @@ import {
   Lasso,
   Hand as HandIcon,
   ScanLine,
+  ImagePlus,
 } from "lucide-react";
 
 interface MoreToolsMenuProps {
@@ -43,6 +44,7 @@ interface MoreToolsMenuProps {
   onEmbed: (url: string) => void;
   onHandDraw?: () => void;
   onWireframe?: () => void;
+  onImage?: () => void;
 }
 
 export function MoreToolsMenu({
@@ -53,6 +55,7 @@ export function MoreToolsMenu({
   onEmbed,
   onHandDraw,
   onWireframe,
+  onImage,
 }: MoreToolsMenuProps) {
   const [aiOpen, setAiOpen] = useState(false);
   const [mermaidOpen, setMermaidOpen] = useState(false);
@@ -93,6 +96,11 @@ export function MoreToolsMenu({
             >
               <FrameIcon className="h-4 w-4 mr-2" /> Frame tool <Shortcut k="F" />
             </DropdownMenuItem>
+            {onImage && (
+              <DropdownMenuItem className="cursor-pointer" onClick={onImage}>
+                <ImagePlus className="h-4 w-4 mr-2" /> Insert image
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               className="cursor-pointer"
               onSelect={(e) => {

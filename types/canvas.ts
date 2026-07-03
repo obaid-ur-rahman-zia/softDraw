@@ -27,6 +27,7 @@ export enum LayerType {
     Arrow,
     Frame,
     Embed,
+    Image,
 }
 
 export type FillStyle = "solid" | "hachure" | "cross-hatch";
@@ -82,6 +83,8 @@ export type ArrowLayer = { type: LayerType.Arrow } & Box;
 export type FrameLayer = { type: LayerType.Frame } & Box;
 // An embedded website (value = URL).
 export type EmbedLayer = { type: LayerType.Embed } & Box;
+// A raster image (url = data URL or remote src).
+export type ImageLayer = { type: LayerType.Image; url: string } & Box;
 
 export type Point = {
     x: number;
@@ -184,4 +187,5 @@ export type Layer =
     | LineLayer
     | ArrowLayer
     | FrameLayer
-    | EmbedLayer;
+    | EmbedLayer
+    | ImageLayer;

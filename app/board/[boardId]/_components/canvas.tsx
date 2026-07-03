@@ -66,7 +66,20 @@ import { MoreToolsMenu } from "@/components/canvas/more-tools-menu";
 import { HandDrawController } from "@/components/canvas/hand-draw";
 import { WireframeDialog } from "@/components/canvas/wireframe-dialog";
 import { recognizeStroke, buildRecognizedLayer } from "@/lib/beautify";
+import { requestTextFocus } from "@/lib/text-focus";
+import { usePinchZoom } from "@/hooks/use-pinch-zoom";
+import {
+  pickImageFile,
+  readImageFile,
+  imageBounds,
+  type LoadedImage,
+} from "@/lib/image-insert";
 import { CollaborationDialog } from "@/components/canvas/collaboration-dialog";
+import {
+  PresentationOverlay,
+  type Slide,
+} from "@/components/canvas/presentation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -85,6 +98,8 @@ const MAX_LAYERS = 100;
 const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
   const router = useRouter();
   const [collabOpen, setCollabOpen] = useState(false);
+  const [presenting, setPresenting] = useState(false);
+  const [slides, setSlides] = useState<Slide[]>([]);
   const layerIds = useStorage((root) => root.layerIds);
 
   const pencilDraft = useSelf((me) => me.presence.pencilDraft)
@@ -153,8 +168,15 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     camY: number;
   } | null>(null);
   const spaceRef = useRef(false);
+  const pinchingRef = useRef(false);
 
- 
+  const cancelDrafts = useMutation(({ setMyPresence }) => {
+    setMyPresence({ pencilDraft: null });
+  }, []);
+  usePinchZoom(containerRef, setCamera, pinchingRef, () => {
+    setShapeDraft(null);
+    cancelDrafts();
+  });
 
   useDisableScrollBounce()
   const history = useHistory();
@@ -189,6 +211,9 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
       liveLayers.set(layerId, layer);
 
       setMyPresence({ selection: [layerId] }, { addToHistory: true });
+      if (layerType === LayerType.Text || layerType === LayerType.Note) {
+        requestTextFocus(layerId);
+      }
     },
     [lastUsedColor, style]
   );
@@ -229,6 +254,58 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     },
     []
   );
+
+  const insertImage = useMutation(
+    ({ storage, setMyPresence }, img: LoadedImage, center: { x: number; y: number }) => {
+      const liveLayers = storage.get("layers");
+      if (liveLayers.size >= MAX_LAYERS) return;
+      const b = imageBounds(img, center);
+      const id = nanoid();
+      liveLayers.set(
+        id,
+        new LiveObject<Layer>({
+          type: LayerType.Image,
+          x: b.x,
+          y: b.y,
+          width: b.width,
+          height: b.height,
+          fill: { r: 0, g: 0, b: 0 },
+          url: img.url,
+        } as Layer)
+      );
+      storage.get("layerIds").push(id);
+      setMyPresence({ selection: [id] }, { addToHistory: true });
+    },
+    []
+  );
+
+  const canvasCenter = useCallback(
+    () => ({
+      x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+      y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+    }),
+    [camera]
+  );
+
+  const onInsertImage = useCallback(async () => {
+    const img = await pickImageFile();
+    if (img) insertImage(img, canvasCenter());
+  }, [insertImage, canvasCenter]);
+
+  // Paste an image from the clipboard.
+  useEffect(() => {
+    const onPaste = async (e: ClipboardEvent) => {
+      const file = Array.from(e.clipboardData?.items ?? [])
+        .find((i) => i.type.startsWith("image/"))
+        ?.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      const img = await readImageFile(file);
+      insertImage(img, canvasCenter());
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [insertImage, canvasCenter]);
 
   const lassoSelect = useMutation(
     ({ storage, setMyPresence }, poly: number[][]) => {
@@ -641,6 +718,9 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     ({ setMyPresence }, e: React.PointerEvent) => {
       e.preventDefault();
 
+      // A two-finger pinch is in progress — the pinch hook owns the camera.
+      if (pinchingRef.current) return;
+
       // Panning (hand tool or held space) — move the camera, skip everything else.
       if (panRef.current) {
         const { startX, startY, camX, camY } = panRef.current;
@@ -704,6 +784,7 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (pinchingRef.current) return;
       // Pan with the hand tool, held space, or middle mouse button.
       if (
         canvasState.mode === CanvasMode.Hand ||
@@ -1015,6 +1096,39 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     if (mySelection?.length) applyStyleToSelection(partial);
   };
 
+  // Frames = presentation slides, ordered top-to-bottom then left-to-right.
+  // Read on demand (not via useStorage) to avoid a new-array-every-render loop.
+  const collectSlides = useMutation(({ storage }): Slide[] => {
+    const layers = storage.get("layers");
+    const out: Slide[] = [];
+    storage
+      .get("layerIds")
+      .toImmutable()
+      .forEach((id) => {
+        const l = layers.get(id)?.toImmutable() as Layer | undefined;
+        if (l && l.type === LayerType.Frame) {
+          out.push({
+            id,
+            title: l.value,
+            bounds: { x: l.x, y: l.y, width: l.width, height: l.height },
+          });
+        }
+      });
+    return out.sort(
+      (a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x
+    );
+  }, []);
+
+  const startPresenting = () => {
+    const s = collectSlides();
+    if (!s.length) {
+      toast.error("Add a Frame (press F) to present — each frame is a slide.");
+      return;
+    }
+    setSlides(s);
+    setPresenting(true);
+  };
+
   return (
     <main
       ref={containerRef}
@@ -1024,6 +1138,7 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
               className="fixed inset-0 -z-10 h-full w-full bg-background dark:bg-[radial-gradient(#393e4a_1px,transparent_1px)] bg-[radial-gradient(#dadde2_1px,transparent_1px)] [background-size:16px_16px]"
               style={bgColor ? { backgroundColor: bgColor } : undefined}
             />
+      {!presenting && (
       <CanvasMenu
         onExportPng={() => svgRef.current && exportPng(svgRef.current, bgColor || "#ffffff")}
         onExportSvg={() => svgRef.current && exportSvg(svgRef.current)}
@@ -1031,11 +1146,22 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
         bgColor={bgColor || "#ffffff"}
         setBgColor={setBgColor}
         onInsert={insertFlowchart}
+        onPresent={startPresenting}
         origin={() => ({
           x: (window.innerWidth / 2 - camera.x) / camera.zoom,
           y: (window.innerHeight / 2 - camera.y) / camera.zoom,
         })}
       />
+      )}
+      {presenting && (
+        <PresentationOverlay
+          slides={slides}
+          setCamera={setCamera}
+          onExit={() => setPresenting(false)}
+        />
+      )}
+      {!presenting && (
+      <>
       {guest ? (
         <div className="top-2 absolute left-16 bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center shadow-md gap-2">
           <Link href="/" className="flex items-center gap-2">
@@ -1090,6 +1216,7 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
             }
             onHandDraw={() => setHandMode(true)}
             onWireframe={() => setWireframeOpen(true)}
+            onImage={onInsertImage}
           />
         }
       />
@@ -1150,6 +1277,8 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
             : null
         }
       />
+      </>
+      )}
       <svg
         ref={svgRef}
         className="w-full h-full"
