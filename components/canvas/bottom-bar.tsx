@@ -27,7 +27,7 @@ export const BottomBar = ({
   return (
     <div
       data-tour="zoom"
-      className="absolute bottom-3 left-3 z-10 flex items-center gap-x-2 select-none"
+      className="absolute bottom-16 left-2 sm:bottom-3 sm:left-3 z-10 flex items-center gap-x-2 select-none"
     >
       <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-lg shadow-md flex items-center p-1">
         <Button variant="board" size="icon" onClick={onZoomOut}>

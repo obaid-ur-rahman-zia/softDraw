@@ -1242,7 +1242,7 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
       />
       <div
         data-tour="ai"
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
+        className="hidden sm:block absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
       >
         <AiFlowchartDialog
           onInsert={insertFlowchart}

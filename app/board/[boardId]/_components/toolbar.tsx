@@ -45,7 +45,7 @@ const Toolbar = ({
   return (
     <div
       data-tour="toolbar"
-      className="absolute top-2 left-1/2 -translate-x-1/2 z-10 max-w-[calc(100vw-6.5rem)]"
+      className="absolute left-1/2 -translate-x-1/2 z-10 bottom-2 max-w-[calc(100vw-1rem)] sm:bottom-auto sm:top-2 sm:max-w-[calc(100vw-6.5rem)]"
     >
       <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-lg p-1.5 flex items-center gap-x-0.5 shadow-md overflow-x-auto no-scrollbar">
         <ToolButton

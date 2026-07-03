@@ -1018,29 +1018,35 @@ export const GuestBoard = () => {
 
       {/* Top bar */}
       <div className="absolute top-2 left-16 right-2 flex items-center justify-between z-10">
-        <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-3 h-12 flex items-center gap-x-2 shadow-md">
+        <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 sm:px-3 h-12 flex items-center gap-x-2 shadow-md min-w-0">
           <Image src="/logo.svg" alt={APP.APP_NAME} width={32} height={32} />
-          <span className="font-semibold">{APP.APP_NAME}</span>
+          <span className="font-semibold hidden sm:inline">{APP.APP_NAME}</span>
           <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">
             Guest whiteboard — not saved
           </span>
         </div>
-        <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center gap-x-2 shadow-md">
+        <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center gap-x-1 sm:gap-x-2 shadow-md">
           <Button
             variant="ghost"
             size="sm"
-            className="text-indigo-500 hover:text-indigo-600"
+            className="text-indigo-500 hover:text-indigo-600 px-2"
             onClick={() => setCollabOpen(true)}
           >
-            <Share2 className="h-4 w-4" /> Share
+            <Share2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Share</span>
           </Button>
           {status === "authenticated" ? (
             <>
-              <Button variant="ghost" size="sm" asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                className="hidden sm:inline-flex"
+              >
                 <Link href="/dashboard">My boards</Link>
               </Button>
               <Button size="sm" disabled={saving} onClick={onSave}>
-                {saving ? "Saving…" : "Save to my boards"}
+                {saving ? "Saving…" : "Save"}
               </Button>
             </>
           ) : (
@@ -1131,7 +1137,7 @@ export const GuestBoard = () => {
 
       <div
         data-tour="ai"
-        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
+        className="hidden sm:block absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
       >
         <AiFlowchartDialog
           onInsert={insertFlowchart}
