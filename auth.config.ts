@@ -15,9 +15,11 @@ export const authConfig = {
 
       // Publicly accessible without a session.
       const isPublic =
+        pathname === "/" || // guest whiteboard is the landing page
         pathname === "/sign-in" ||
         pathname === "/sign-up" ||
-        pathname.startsWith("/draw") || // guest whiteboard
+        pathname.startsWith("/draw") || // guest whiteboard (legacy alias)
+        pathname.startsWith("/r/") || // public live-collaboration rooms
         pathname.startsWith("/invite") || // invitation accept flow
         pathname.startsWith("/api"); // API routes enforce their own auth
 

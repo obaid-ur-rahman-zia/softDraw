@@ -11,7 +11,9 @@ export type AuthActionState = { error?: string } | undefined;
 /** Only allow relative in-app redirects (prevents open-redirect). */
 function safeCallbackUrl(value: FormDataEntryValue | null): string {
   const url = typeof value === "string" ? value : "";
-  return url.startsWith("/") && !url.startsWith("//") ? url : "/";
+  // Default post-login landing is the boards dashboard (the root "/" is the
+  // public guest whiteboard).
+  return url.startsWith("/") && !url.startsWith("//") ? url : "/dashboard";
 }
 
 export async function signUp(
@@ -64,7 +66,7 @@ export async function signUp(
 }
 
 export async function signInWithGoogle() {
-  await signIn("google", { redirectTo: "/" });
+  await signIn("google", { redirectTo: "/dashboard" });
 }
 
 export async function signInWithCredentials(

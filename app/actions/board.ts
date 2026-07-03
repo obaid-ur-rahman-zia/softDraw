@@ -32,7 +32,7 @@ export async function createBoard({
     },
   });
 
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return board.id;
 }
 
@@ -56,7 +56,7 @@ export async function removeBoard({ id }: { id: string }) {
 
   // Favourites cascade via schema, but delete explicitly to be safe.
   await prisma.board.delete({ where: { id } });
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 export async function updateBoard({ id, title }: { id: string; title: string }) {
@@ -70,7 +70,7 @@ export async function updateBoard({ id, title }: { id: string; title: string }) 
     throw new Error("Title cannot be longer than 60 characters!");
 
   await prisma.board.update({ where: { id }, data: { title: trimmed } });
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   revalidatePath(`/board/${id}`);
 }
 
@@ -90,7 +90,7 @@ export async function favouriteBoard({
     create: { userId: user.id, boardId: id, orgId },
     update: {},
   });
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 export async function unfavouriteBoard({ id }: { id: string }) {
@@ -100,5 +100,5 @@ export async function unfavouriteBoard({ id }: { id: string }) {
     .catch(() => {
       throw new Error("Favourited whiteboard not found!");
     });
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }

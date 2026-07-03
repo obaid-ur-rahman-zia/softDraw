@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import EmptyOrg from "./_components/empty-org";
-import { BoardList, BoardListSkeleton } from "./_components/board-list";
+import EmptyOrg from "../_components/empty-org";
+import { BoardList, BoardListSkeleton } from "../_components/board-list";
 import { getActiveContext } from "@/lib/queries";
 
 interface DashboardPageProps {

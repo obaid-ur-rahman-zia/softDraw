@@ -57,6 +57,9 @@ import { MoreToolsMenu } from "@/components/canvas/more-tools-menu";
 import { HandDrawController } from "@/components/canvas/hand-draw";
 import { WireframeDialog } from "@/components/canvas/wireframe-dialog";
 import { recognizeStroke, buildRecognizedLayer } from "@/lib/beautify";
+import { CollaborationDialog } from "@/components/canvas/collaboration-dialog";
+import { newGuestRoomId, setGuestName } from "@/lib/collab";
+import { Share2 } from "lucide-react";
 import { exportPng, exportSvg, canvasToPngDataUrl } from "@/lib/canvas-export";
 import { Trash2 } from "lucide-react";
 
@@ -110,6 +113,7 @@ export const GuestBoard = () => {
     null
   );
   const [wireframeOpen, setWireframeOpen] = useState(false);
+  const [collabOpen, setCollabOpen] = useState(false);
   const prevPinchRef = useRef(false);
   const historyPushed = useRef(false);
 
@@ -816,6 +820,15 @@ export const GuestBoard = () => {
     return () => clearInterval(id);
   }, [canvasState.mode]);
 
+  // Start a live-collaboration session: spin up a public room seeded with the
+  // current drawing and jump into it.
+  const startSession = (name: string) => {
+    setGuestName(name);
+    const roomId = newGuestRoomId();
+    stashImport(roomId, present);
+    router.push(`/r/${roomId}`);
+  };
+
   // ── Save on login ──────────────────────────────────────────────────
   const onSave = async () => {
     if (!layerIds.length) {
@@ -902,10 +915,18 @@ export const GuestBoard = () => {
           </span>
         </div>
         <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center gap-x-2 shadow-md">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-indigo-500 hover:text-indigo-600"
+            onClick={() => setCollabOpen(true)}
+          >
+            <Share2 className="h-4 w-4" /> Share
+          </Button>
           {status === "authenticated" ? (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/">My boards</Link>
+                <Link href="/dashboard">My boards</Link>
               </Button>
               <Button size="sm" disabled={saving} onClick={onSave}>
                 {saving ? "Saving…" : "Save to my boards"}
@@ -913,7 +934,7 @@ export const GuestBoard = () => {
             </>
           ) : (
             <Button size="sm" asChild disabled={status === "loading"}>
-              <Link href="/sign-in?callbackUrl=/draw">Sign in to save</Link>
+              <Link href="/sign-in?callbackUrl=/">Sign in to save</Link>
             </Button>
           )}
         </div>
@@ -968,6 +989,11 @@ export const GuestBoard = () => {
             ? canvasToPngDataUrl(svgRef.current, bgColor)
             : null
         }
+      />
+      <CollaborationDialog
+        open={collabOpen}
+        onOpenChange={setCollabOpen}
+        onStart={startSession}
       />
 
       <BottomBar

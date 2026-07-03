@@ -66,15 +66,25 @@ import { MoreToolsMenu } from "@/components/canvas/more-tools-menu";
 import { HandDrawController } from "@/components/canvas/hand-draw";
 import { WireframeDialog } from "@/components/canvas/wireframe-dialog";
 import { recognizeStroke, buildRecognizedLayer } from "@/lib/beautify";
+import { CollaborationDialog } from "@/components/canvas/collaboration-dialog";
+import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { Share2 } from "lucide-react";
 
 interface CanvasProps {
   boardId: string;
   boardTitle: string;
+  /** True when rendered as a public live-collaboration room (no saved board). */
+  guest?: boolean;
 }
 
 const MAX_LAYERS = 100;
 
-const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
+const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
+  const router = useRouter();
+  const [collabOpen, setCollabOpen] = useState(false);
   const layerIds = useStorage((root) => root.layerIds);
 
   const pencilDraft = useSelf((me) => me.presence.pencilDraft)
@@ -1026,8 +1036,38 @@ const Canvas = ({ boardId, boardTitle }: CanvasProps) => {
           y: (window.innerHeight / 2 - camera.y) / camera.zoom,
         })}
       />
-      <Info boardId={boardId} title={boardTitle} />
+      {guest ? (
+        <div className="top-2 absolute left-16 bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center shadow-md gap-2">
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="SoftDraw" width={32} height={32} />
+            <span className="font-semibold">SoftDraw</span>
+          </Link>
+          <span className="text-xs text-indigo-500 font-medium ml-1 flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            Live
+          </span>
+        </div>
+      ) : (
+        <Info boardId={boardId} title={boardTitle} />
+      )}
       <Participants />
+      {guest && (
+        <Button
+          onClick={() => setCollabOpen(true)}
+          className="absolute top-16 right-2 z-10 bg-indigo-500 hover:bg-indigo-600 text-white shadow-md"
+          size="sm"
+        >
+          <Share2 className="h-4 w-4" /> Share
+        </Button>
+      )}
+      {guest && (
+        <CollaborationDialog
+          open={collabOpen}
+          onOpenChange={setCollabOpen}
+          roomId={boardId}
+          onStop={() => router.push("/")}
+        />
+      )}
       <Toolbar
         canvasState={canvasState}
         setCanvasState={setCanvasState}

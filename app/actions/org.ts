@@ -24,7 +24,7 @@ export async function createOrganization({ name }: { name: string }) {
     data: { activeOrgId: org.id },
   });
 
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return org.id;
 }
 
@@ -34,7 +34,7 @@ export async function setActiveOrg({ orgId }: { orgId: string }) {
     where: { id: user.id },
     data: { activeOrgId: orgId },
   });
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 /** Creates a pending invitation and returns a shareable accept URL path. */
@@ -88,6 +88,6 @@ export async function acceptInvitation({ token }: { token: string }) {
 
   await prisma.invitation.delete({ where: { token } }).catch(() => {});
 
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return invite.orgId;
 }

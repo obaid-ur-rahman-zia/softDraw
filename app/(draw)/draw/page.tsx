@@ -1,14 +1,7 @@
-import { GuestBoard } from "@/components/draw/guest-board";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Draw — SoftDraw",
-  description: "Sketch on a free whiteboard. Sign in to save your work.",
-};
-
+// The guest whiteboard now lives at the root "/". Keep this path as a
+// backwards-compatible alias.
 export default function DrawPage() {
-  return (
-    <div className="h-screen w-screen overflow-hidden">
-      <GuestBoard />
-    </div>
-  );
+  redirect("/");
 }

@@ -24,7 +24,7 @@ const BoardIdPage = async ({ params }: BoardIdPageProps) => {
   const membership = await prisma.membership.findUnique({
     where: { userId_orgId: { userId: session.user.id, orgId: board.orgId } },
   });
-  if (!membership) redirect("/");
+  if (!membership) redirect("/dashboard");
 
   return (
     <Room roomId={boardId} fallback={<Loading />}>

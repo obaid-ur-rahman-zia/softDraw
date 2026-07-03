@@ -14,7 +14,7 @@ export function AcceptInvite({ token }: { token: string }) {
     mutate({ token })
       .then(() => {
         toast.success("You've joined the team!");
-        router.push("/");
+        router.push("/dashboard");
       })
       .catch((err) => toast.error(err?.message ?? "Could not accept invite"));
   };

@@ -130,7 +130,7 @@ export const AuthForm = ({ mode, googleEnabled, callbackUrl }: AuthFormProps) =>
       </p>
 
       <p className="text-center text-xs text-muted-foreground">
-        <Link href="/draw" className="underline">
+        <Link href="/" className="underline">
           Continue as guest
         </Link>{" "}
         — draw now, save after you sign in.

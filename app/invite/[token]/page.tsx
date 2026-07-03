@@ -41,7 +41,7 @@ export default async function InvitePage({ params }: InvitePageProps) {
             link.
           </p>
           <Button asChild variant="outline">
-            <Link href="/">Go to dashboard</Link>
+            <Link href="/dashboard">Go to dashboard</Link>
           </Button>
         </>
       ) : (
