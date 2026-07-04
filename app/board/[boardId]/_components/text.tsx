@@ -17,10 +17,7 @@ export function focusAndSelect(el: HTMLElement | null) {
   sel?.addRange(range);
 }
 
-const calculateFontSize = (width: number, height: number) => {
-  const scaleFactor = 0.5;
-  return Math.min(height * scaleFactor, width * scaleFactor, 1000);
-};
+const DEFAULT_TEXT_SIZE = 20;
 
 interface TextProps {
   id: string;
@@ -38,19 +35,19 @@ export const Text = ({
   onValueChange,
 }: TextProps) => {
   const { x, y, width, height, value } = layer;
-  const size = layer.fontSize ?? calculateFontSize(width, height);
+  const size = layer.fontSize ?? DEFAULT_TEXT_SIZE;
   const color = resolveStroke(layer);
-  const align = layer.textAlign ?? "center";
+  const align = layer.textAlign ?? "left";
   const justify =
     align === "left"
       ? "justify-start text-left"
       : align === "right"
         ? "justify-end text-right"
         : "justify-center text-center";
+  // Default to a clean sans; the hand-drawn Kalam font is opt-in.
+  const family = layer.fontFamily ?? "normal";
   const fontCls =
-    !layer.fontFamily || layer.fontFamily === "hand"
-      ? textFont.className
-      : fontFamilyClass(layer.fontFamily);
+    family === "hand" ? textFont.className : fontFamilyClass(family);
 
   const ref = useRef<HTMLDivElement>(null);
 
@@ -91,7 +88,7 @@ export const Text = ({
         onDoubleClick={startEditing}
         disabled={!onValueChange}
         className={cn(
-          "w-full h-full flex items-center drop-shadow-md outline-none select-none focus:select-text cursor-text",
+          "w-full h-full flex items-start outline-none select-none focus:select-text cursor-text leading-snug break-words whitespace-pre-wrap",
           justify,
           fontCls
         )}

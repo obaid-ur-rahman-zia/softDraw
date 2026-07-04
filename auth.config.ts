@@ -20,6 +20,8 @@ export const authConfig = {
         pathname === "/sign-up" ||
         pathname.startsWith("/draw") || // guest whiteboard (legacy alias)
         pathname.startsWith("/r/") || // public live-collaboration rooms
+        pathname === "/screen" || // desktop screen-annotation overlay
+        pathname === "/download" || // desktop app download page
         pathname.startsWith("/invite") || // invitation accept flow
         pathname.startsWith("/api"); // API routes enforce their own auth
 

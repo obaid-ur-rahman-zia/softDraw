@@ -37,13 +37,14 @@ interface RoughShapeProps {
   onValueChange?: (id: string, value: string) => void;
 }
 
-function headPoints(tipX: number, tipY: number, angle: number, size: number) {
-  const spread = 0.45;
+// Open "V" arrowhead barbs: p1 → tip → p2 (drawn as a stroked polyline).
+function headBarbs(tipX: number, tipY: number, angle: number, size: number) {
+  const spread = 0.42;
   const p1x = tipX - size * Math.cos(angle - spread);
   const p1y = tipY - size * Math.sin(angle - spread);
   const p2x = tipX - size * Math.cos(angle + spread);
   const p2y = tipY - size * Math.sin(angle + spread);
-  return `${tipX},${tipY} ${p1x},${p1y} ${p2x},${p2y}`;
+  return `${p1x},${p1y} ${tipX},${tipY} ${p2x},${p2y}`;
 }
 
 export const RoughShape = ({

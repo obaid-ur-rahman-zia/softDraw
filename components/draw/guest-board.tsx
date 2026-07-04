@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nanoid } from "nanoid";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
@@ -37,13 +36,10 @@ import {
 import { useLocalBoard } from "@/hooks/use-local-board";
 import { stashImport } from "@/lib/guest-handoff";
 import { saveGuestBoard } from "@/app/actions/board";
-import { AiFlowchartDialog } from "@/components/ai/ai-flowchart-dialog";
 import type { PositionedLayer } from "@/lib/flowchart-layout";
-import { APP } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import Toolbar from "@/app/board/[boardId]/_components/toolbar";
 import { LayerRenderer } from "@/app/board/[boardId]/_components/layer-renderer";
-import { ColorPicker } from "@/app/board/[boardId]/_components/color-picker";
 import { Path, strokeWidthToSize } from "@/app/board/[boardId]/_components/path";
 import { BottomBar } from "@/components/canvas/bottom-bar";
 import {
@@ -62,9 +58,13 @@ import {
   PresentationOverlay,
   type Slide,
 } from "@/components/canvas/presentation";
+import { CommandPalette } from "@/components/canvas/command-palette";
+import { buildPaletteGroups } from "@/lib/canvas-commands";
+import { AiChatPanel } from "@/components/ai/ai-chat-panel";
 import { newGuestRoomId, setGuestName } from "@/lib/collab";
 import { requestTextFocus } from "@/lib/text-focus";
 import { usePinchZoom } from "@/hooks/use-pinch-zoom";
+import { Sparkles } from "lucide-react";
 import {
   pickImageFile,
   readImageFile,
@@ -73,7 +73,6 @@ import {
 } from "@/lib/image-insert";
 import { Share2 } from "lucide-react";
 import { exportPng, exportSvg, canvasToPngDataUrl } from "@/lib/canvas-export";
-import { Trash2 } from "lucide-react";
 
 const MAX_LAYERS = 100;
 const SELECTION_COLOR = "#3b82f6";
@@ -99,7 +98,7 @@ export const GuestBoard = () => {
   const board = useLocalBoard();
   const router = useRouter();
   const { status } = useSession();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
   const [canvasState, setCanvasState] = useState<CanvasState>({
     mode: CanvasMode.None,
@@ -127,20 +126,11 @@ export const GuestBoard = () => {
   const [wireframeOpen, setWireframeOpen] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const prevPinchRef = useRef(false);
   const historyPushed = useRef(false);
 
-  useEffect(() => {
-    setLastUsedColor((c) => {
-      const isDefault =
-        (c.r === 0 && c.g === 0 && c.b === 0) ||
-        (c.r === 255 && c.g === 255 && c.b === 255);
-      if (!isDefault) return c;
-      return resolvedTheme === "dark"
-        ? { r: 255, g: 255, b: 255 }
-        : { r: 0, g: 0, b: 0 };
-    });
-  }, [resolvedTheme]);
   const containerRef = useRef<HTMLElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const panRef = useRef<{
@@ -460,22 +450,6 @@ export const GuestBoard = () => {
     setSelection([]);
   }, [selection, mutate]);
 
-  const setFill = useCallback(
-    (color: Color) => {
-      setLastUsedColor(color);
-      if (!selection.length) return;
-      mutate((prev) => {
-        const layers = { ...prev.layers };
-        selection.forEach((id) => {
-          const l = layers[id];
-          if (l) layers[id] = { ...l, fill: color };
-        });
-        return { ...prev, layers };
-      });
-    },
-    [selection, mutate]
-  );
-
   const updateValue = useCallback(
     (id: string, value: string) => {
       mutateLive((prev) => {
@@ -499,6 +473,23 @@ export const GuestBoard = () => {
         }
         return { layers, layerIds: ids };
       });
+    },
+    [mutate]
+  );
+
+  const replaceFlowchart = useCallback(
+    (prevIds: string[], items: PositionedLayer[]) => {
+      mutate((prev) => {
+        const layers = { ...prev.layers };
+        for (const id of prevIds) delete layers[id];
+        const ids = prev.layerIds.filter((id) => !prevIds.includes(id));
+        for (const { id, layer } of items) {
+          layers[id] = layer;
+          ids.push(id);
+        }
+        return { layers, layerIds: ids };
+      });
+      setSelection([]);
     },
     [mutate]
   );
@@ -790,7 +781,10 @@ export const GuestBoard = () => {
 
       if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();
-        if (k === "=" || k === "+") {
+        if (k === "/" || k === "k") {
+          e.preventDefault();
+          setPaletteOpen((o) => !o);
+        } else if (k === "=" || k === "+") {
           e.preventDefault();
           zoomAtCenter(1.2);
         } else if (k === "-") {
@@ -925,13 +919,6 @@ export const GuestBoard = () => {
     }
   };
 
-  const selectionToolsX = selectionBounds
-    ? (selectionBounds.x + selectionBounds.width / 2) * camera.zoom + camera.x
-    : 0;
-  const selectionToolsY = selectionBounds
-    ? selectionBounds.y * camera.zoom + camera.y
-    : 0;
-
   const selectedLayer = selection.length
     ? present.layers[selection[0]]
     : null;
@@ -980,6 +967,27 @@ export const GuestBoard = () => {
     setPresenting(true);
   };
 
+  const paletteGroups = buildPaletteGroups({
+    setCanvasState,
+    onExportPng: () => svgRef.current && exportPng(svgRef.current, bgColor),
+    onExportSvg: () => svgRef.current && exportSvg(svgRef.current),
+    onShare: () => setCollabOpen(true),
+    onPresent: startPresenting,
+    onImage: onInsertImage,
+    onAi: () => setAiChatOpen(true),
+    onWireframe: () => setWireframeOpen(true),
+    onHandDraw: () => setHandMode(true),
+    onReset: () => {
+      board.clear();
+      setSelection([]);
+    },
+    onHelp: () => window.dispatchEvent(new Event("softdraw:start-tour")),
+    toggleTheme: () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),
+    zoomIn: () => zoomAtCenter(1.2),
+    zoomOut: () => zoomAtCenter(1 / 1.2),
+    zoomReset: () => zoomAtCenter(1, 1),
+  });
+
   return (
     <main
       ref={containerRef}
@@ -1010,21 +1018,18 @@ export const GuestBoard = () => {
         setBgColor={setBgColor}
         onInsert={insertFlowchart}
         onPresent={startPresenting}
+        onShare={() => setCollabOpen(true)}
+        onCommandPalette={() => setPaletteOpen(true)}
+        onHelp={() => window.dispatchEvent(new Event("softdraw:start-tour"))}
+        brand={{ subtitle: "Guest whiteboard — not saved" }}
         origin={() => ({
           x: (window.innerWidth / 2 - camera.x) / camera.zoom,
           y: (window.innerHeight / 2 - camera.y) / camera.zoom,
         })}
       />
 
-      {/* Top bar */}
-      <div className="absolute top-2 left-16 right-2 flex items-center justify-between z-10">
-        <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 sm:px-3 h-12 flex items-center gap-x-2 shadow-md min-w-0">
-          <Image src="/logo.svg" alt={APP.APP_NAME} width={32} height={32} />
-          <span className="font-semibold hidden sm:inline">{APP.APP_NAME}</span>
-          <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">
-            Guest whiteboard — not saved
-          </span>
-        </div>
+      {/* Top bar (right-aligned actions; branding lives in the menu) */}
+      <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
         <div className="bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center gap-x-1 sm:gap-x-2 shadow-md">
           <Button
             variant="ghost"
@@ -1113,6 +1118,11 @@ export const GuestBoard = () => {
         onOpenChange={setCollabOpen}
         onStart={startSession}
       />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        groups={paletteGroups}
+      />
 
       <BottomBar
         zoom={camera.zoom}
@@ -1132,6 +1142,7 @@ export const GuestBoard = () => {
           onChange={onStyleChange}
           hasSelection={selection.length > 0}
           onZOrder={changeZOrder}
+          onDelete={deleteSelected}
         />
       )}
 
@@ -1139,34 +1150,24 @@ export const GuestBoard = () => {
         data-tour="ai"
         className="hidden sm:block absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
       >
-        <AiFlowchartDialog
-          onInsert={insertFlowchart}
-          origin={() => ({
-            x: (window.innerWidth / 2 - camera.x) / camera.zoom,
-            y: (window.innerHeight / 2 - camera.y) / camera.zoom,
-          })}
-        />
-      </div>
-      <OnboardingTour />
-
-      {/* Selection tools */}
-      {selectionBounds && (
-        <div
-          className="absolute p-3 rounded-xl bg-white shadow-sm border flex select-none z-10"
-          style={{
-            transform: `translate(calc(${selectionToolsX}px - 50%), calc(${
-              selectionToolsY - 16
-            }px - 100%))`,
-          }}
+        <Button
+          onClick={() => setAiChatOpen(true)}
+          className="shadow-md gap-x-2 bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:opacity-90 text-white"
         >
-          <ColorPicker onChange={setFill} />
-          <div className="flex items-center pl-2 ml-2 border-l border-neutral-200">
-            <Button variant="board" size="icon" onClick={deleteSelected}>
-              <Trash2 />
-            </Button>
-          </div>
-        </div>
-      )}
+          <Sparkles className="h-4 w-4" /> Generate with AI
+        </Button>
+      </div>
+      <AiChatPanel
+        open={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        origin={() => ({
+          x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+          y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+        })}
+        onInsert={insertFlowchart}
+        onReplace={replaceFlowchart}
+      />
+      <OnboardingTour />
       </>
       )}
 
@@ -1188,6 +1189,7 @@ export const GuestBoard = () => {
         onPointerDown={onPointerDown}
       >
         <g
+          className="sd-canvas-content"
           style={{
             transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`,
           }}
@@ -1210,61 +1212,60 @@ export const GuestBoard = () => {
           })}
 
           {/* Selection box + resize handles (single, non-path selection) */}
-          {selectionBounds && (
-            <>
-              <rect
-                className="fill-transparent stroke-blue-500 stroke-1 pointer-events-none"
-                style={{
-                  transform: `translate(${selectionBounds.x}px, ${selectionBounds.y}px)`,
-                }}
-                width={selectionBounds.width}
-                height={selectionBounds.height}
-              />
-              {selection.length === 1 &&
-                soleSelectedType !== LayerType.Path &&
-                (
-                  [
-                    { c: Side.Top + Side.Left, dx: 0, dy: 0, cur: "nwse-resize" },
-                    { c: Side.Top, dx: 0.5, dy: 0, cur: "ns-resize" },
-                    { c: Side.Top + Side.Right, dx: 1, dy: 0, cur: "nesw-resize" },
-                    { c: Side.Right, dx: 1, dy: 0.5, cur: "ew-resize" },
-                    {
-                      c: Side.Bottom + Side.Right,
-                      dx: 1,
-                      dy: 1,
-                      cur: "nwse-resize",
-                    },
-                    { c: Side.Bottom, dx: 0.5, dy: 1, cur: "ns-resize" },
-                    {
-                      c: Side.Bottom + Side.Left,
-                      dx: 0,
-                      dy: 1,
-                      cur: "nesw-resize",
-                    },
-                    { c: Side.Left, dx: 0, dy: 0.5, cur: "ew-resize" },
-                  ] as const
-                ).map((h, i) => (
+          {selectionBounds &&
+            (() => {
+              const z = camera.zoom || 1;
+              const gap = 6 / z; // constant screen-space gap around the shape
+              const sw = 1.5 / z; // constant stroke width
+              const hs = 10 / z; // constant handle size
+              const bx = selectionBounds.x - gap;
+              const by = selectionBounds.y - gap;
+              const bw = selectionBounds.width + gap * 2;
+              const bh = selectionBounds.height + gap * 2;
+              return (
+                <>
                   <rect
-                    key={i}
-                    className="fill-white stroke-1 stroke-blue-500"
-                    style={{
-                      cursor: h.cur,
-                      width: 8,
-                      height: 8,
-                      transform: `translate(${
-                        selectionBounds.x + selectionBounds.width * h.dx - 4
-                      }px, ${
-                        selectionBounds.y + selectionBounds.height * h.dy - 4
-                      }px)`,
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      onResizeHandlePointerDown(h.c, selectionBounds);
-                    }}
+                    className="fill-transparent stroke-blue-500 pointer-events-none"
+                    x={bx}
+                    y={by}
+                    width={bw}
+                    height={bh}
+                    rx={6 / z}
+                    strokeWidth={sw}
                   />
-                ))}
-            </>
-          )}
+                  {selection.length === 1 &&
+                    soleSelectedType !== LayerType.Path &&
+                    (
+                      [
+                        { c: Side.Top + Side.Left, dx: 0, dy: 0, cur: "nwse-resize" },
+                        { c: Side.Top, dx: 0.5, dy: 0, cur: "ns-resize" },
+                        { c: Side.Top + Side.Right, dx: 1, dy: 0, cur: "nesw-resize" },
+                        { c: Side.Right, dx: 1, dy: 0.5, cur: "ew-resize" },
+                        { c: Side.Bottom + Side.Right, dx: 1, dy: 1, cur: "nwse-resize" },
+                        { c: Side.Bottom, dx: 0.5, dy: 1, cur: "ns-resize" },
+                        { c: Side.Bottom + Side.Left, dx: 0, dy: 1, cur: "nesw-resize" },
+                        { c: Side.Left, dx: 0, dy: 0.5, cur: "ew-resize" },
+                      ] as const
+                    ).map((h, i) => (
+                      <rect
+                        key={i}
+                        className="fill-white stroke-blue-500 drop-shadow-sm"
+                        x={bx + bw * h.dx - hs / 2}
+                        y={by + bh * h.dy - hs / 2}
+                        width={hs}
+                        height={hs}
+                        rx={hs * 0.3}
+                        strokeWidth={sw}
+                        style={{ cursor: h.cur }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          onResizeHandlePointerDown(h.c, selectionBounds);
+                        }}
+                      />
+                    ))}
+                </>
+              );
+            })()}
 
           {canvasState.mode === CanvasMode.SelectionNet &&
             canvasState.current != null && (

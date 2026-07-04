@@ -142,3 +142,13 @@ html, body, :root {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Dark mode: invert canvas content so black shapes/lines read as white while
+   hues stay roughly stable (Excalidraw-style). Images are counter-inverted so
+   they render normally. */
+.dark .sd-canvas-content {
+  filter: invert(0.93) hue-rotate(180deg);
+}
+.dark .sd-canvas-content image {
+  filter: invert(1) hue-rotate(180deg);
+}

@@ -44,12 +44,11 @@ import { nanoid } from "nanoid";
 import { LayerPreview } from "./layer-preview";
 import { LayerRenderer } from "./layer-renderer";
 import { SelectionBox } from "./selection-box";
-import { SelectionTools } from "./selection-tools";
 import { Path, strokeWidthToSize } from "./path";
 import { useDisableScrollBounce } from "@/hooks/use-disable-scroll-bounce";
 import { useDeleteLayers } from "@/hooks/use-delete-layers";
 import { takeImport } from "@/lib/guest-handoff";
-import { AiFlowchartDialog } from "@/components/ai/ai-flowchart-dialog";
+import { AiChatPanel } from "@/components/ai/ai-chat-panel";
 import type { PositionedLayer } from "@/lib/flowchart-layout";
 import { BottomBar } from "@/components/canvas/bottom-bar";
 import {
@@ -79,12 +78,17 @@ import {
   PresentationOverlay,
   type Slide,
 } from "@/components/canvas/presentation";
+import { CommandPalette } from "@/components/canvas/command-palette";
+import { buildPaletteGroups } from "@/lib/canvas-commands";
+import { useRenameModal } from "@/store/use-rename-modal";
+import { useApiMutation } from "@/hooks/use-api-mutation";
+import { removeBoard } from "@/app/actions/board";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Share2 } from "lucide-react";
+import { Share2, Sparkles } from "lucide-react";
 
 interface CanvasProps {
   boardId: string;
@@ -97,9 +101,13 @@ const MAX_LAYERS = 100;
 
 const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
   const router = useRouter();
+  const { onOpen: openRename } = useRenameModal();
+  const { mutate: deleteBoardMutate } = useApiMutation(removeBoard);
   const [collabOpen, setCollabOpen] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [slides, setSlides] = useState<Slide[]>([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const layerIds = useStorage((root) => root.layerIds);
 
   const pencilDraft = useSelf((me) => me.presence.pencilDraft)
@@ -127,19 +135,9 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     return id ? (root.layers.get(id) ?? null) : null;
   });
 
-  // Flip the default drawing colour with the theme (only while untouched).
-  const { resolvedTheme } = useTheme();
-  useEffect(() => {
-    setLastUsedColor((c) => {
-      const isDefault =
-        (c.r === 0 && c.g === 0 && c.b === 0) ||
-        (c.r === 255 && c.g === 255 && c.b === 255);
-      if (!isDefault) return c;
-      return resolvedTheme === "dark"
-        ? { r: 255, g: 255, b: 255 }
-        : { r: 0, g: 0, b: 0 };
-    });
-  }, [resolvedTheme]);
+  // Dark mode inverts the canvas content (see .sd-canvas-content), so colours
+  // are always stored as their light-mode values — no theme flipping here.
+  const { resolvedTheme, setTheme } = useTheme();
 
   // Excalidraw-style drag-to-draw draft for the shape being placed.
   const [shapeDraft, setShapeDraft] = useState<{
@@ -649,6 +647,28 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     []
   );
 
+  // Replace a previous AI generation (delete old layers, insert new ones).
+  const replaceFlowchart = useMutation(
+    ({ storage, setMyPresence }, prevIds: string[], items: PositionedLayer[]) => {
+      const liveLayers = storage.get("layers");
+      const liveLayerIds = storage.get("layerIds");
+      for (const id of prevIds) {
+        if (liveLayers.get(id)) {
+          liveLayers.delete(id);
+          const idx = liveLayerIds.indexOf(id);
+          if (idx !== -1) liveLayerIds.delete(idx);
+        }
+      }
+      for (const { id, layer } of items) {
+        if (liveLayers.size >= MAX_LAYERS) break;
+        liveLayers.set(id, new LiveObject(layer));
+        liveLayerIds.push(id);
+      }
+      setMyPresence({ selection: [] });
+    },
+    []
+  );
+
   const resizeSelectedLayer = useMutation(
     ({ storage, self }, point: Point) => {
       if (canvasState.mode !== CanvasMode.Resizing) {
@@ -968,7 +988,10 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
 
       if (e.ctrlKey || e.metaKey) {
         const k = e.key.toLowerCase();
-        if (k === "=" || k === "+") {
+        if (k === "/" || k === "k") {
+          e.preventDefault();
+          setPaletteOpen((o) => !o);
+        } else if (k === "=" || k === "+") {
           e.preventDefault();
           zoomAtCenter(1.2);
         } else if (k === "-") {
@@ -1129,6 +1152,25 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
     setPresenting(true);
   };
 
+  const paletteGroups = buildPaletteGroups({
+    setCanvasState,
+    onExportPng: () =>
+      svgRef.current && exportPng(svgRef.current, bgColor || "#ffffff"),
+    onExportSvg: () => svgRef.current && exportSvg(svgRef.current),
+    onShare: guest ? () => setCollabOpen(true) : undefined,
+    onPresent: startPresenting,
+    onImage: onInsertImage,
+    onAi: () => setAiChatOpen(true),
+    onWireframe: () => setWireframeOpen(true),
+    onHandDraw: () => setHandMode(true),
+    onReset: resetCanvas,
+    onHelp: () => window.dispatchEvent(new Event("softdraw:start-tour")),
+    toggleTheme: () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),
+    zoomIn: () => zoomAtCenter(1.2),
+    zoomOut: () => zoomAtCenter(1 / 1.2),
+    zoomReset: () => zoomAtCenter(1, 1),
+  });
+
   return (
     <main
       ref={containerRef}
@@ -1147,6 +1189,32 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
         setBgColor={setBgColor}
         onInsert={insertFlowchart}
         onPresent={startPresenting}
+        onShare={guest ? () => setCollabOpen(true) : undefined}
+        onCommandPalette={() => setPaletteOpen(true)}
+        onHelp={() => window.dispatchEvent(new Event("softdraw:start-tour"))}
+        brand={{ subtitle: guest ? "Live collaboration" : boardTitle }}
+        onRename={guest ? undefined : () => openRename(boardId, boardTitle)}
+        onCopyLink={
+          guest
+            ? undefined
+            : () => {
+                navigator.clipboard
+                  .writeText(`${window.location.origin}/board/${boardId}`)
+                  .then(() => toast.success("Board link copied"))
+                  .catch(() => toast.error("Could not copy link"));
+              }
+        }
+        onDeleteBoard={
+          guest
+            ? undefined
+            : () =>
+                deleteBoardMutate({ id: boardId })
+                  .then(() => {
+                    toast.success("Board deleted");
+                    router.push("/dashboard");
+                  })
+                  .catch(() => toast.error("Failed to delete board"))
+        }
         origin={() => ({
           x: (window.innerWidth / 2 - camera.x) / camera.zoom,
           y: (window.innerHeight / 2 - camera.y) / camera.zoom,
@@ -1162,19 +1230,11 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
       )}
       {!presenting && (
       <>
-      {guest ? (
-        <div className="top-2 absolute left-16 bg-white dark:bg-neutral-800 dark:text-neutral-100 rounded-md px-2 h-12 flex items-center shadow-md gap-2">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="SoftDraw" width={32} height={32} />
-            <span className="font-semibold">SoftDraw</span>
-          </Link>
-          <span className="text-xs text-indigo-500 font-medium ml-1 flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            Live
-          </span>
-        </div>
-      ) : (
-        <Info boardId={boardId} title={boardTitle} />
+      {guest && (
+        <span className="absolute top-4 left-52 z-10 hidden sm:flex items-center gap-1 text-xs text-indigo-500 font-medium">
+          <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+          Live
+        </span>
       )}
       <Participants />
       {guest && (
@@ -1220,7 +1280,6 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
           />
         }
       />
-      <SelectionTools camera={camera} setLastUsedColor={setLastUsedColor} />
       {panelTarget != null && (
         <PropertiesPanel
           target={panelTarget}
@@ -1228,6 +1287,7 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
           onChange={onStyleChange}
           hasSelection={!!mySelection?.length}
           onZOrder={changeZOrder}
+          onDelete={deleteLayers}
         />
       )}
       <BottomBar
@@ -1244,13 +1304,12 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
         data-tour="ai"
         className="hidden sm:block absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
       >
-        <AiFlowchartDialog
-          onInsert={insertFlowchart}
-          origin={() => ({
-            x: (window.innerWidth / 2 - camera.x) / camera.zoom,
-            y: (window.innerHeight / 2 - camera.y) / camera.zoom,
-          })}
-        />
+        <Button
+          onClick={() => setAiChatOpen(true)}
+          className="shadow-md gap-x-2 bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:opacity-90 text-white"
+        >
+          <Sparkles className="h-4 w-4" /> Generate with AI
+        </Button>
       </div>
       <OnboardingTour />
       {handMode && (
@@ -1277,6 +1336,21 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
             : null
         }
       />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        groups={paletteGroups}
+      />
+      <AiChatPanel
+        open={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        origin={() => ({
+          x: (window.innerWidth / 2 - camera.x) / camera.zoom,
+          y: (window.innerHeight / 2 - camera.y) / camera.zoom,
+        })}
+        onInsert={insertFlowchart}
+        onReplace={replaceFlowchart}
+      />
       </>
       )}
       <svg
@@ -1298,6 +1372,7 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
         onPointerDown={onPointerDown}
       >
         <g
+          className="sd-canvas-content"
           style={{
             transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`,
           }}
@@ -1310,7 +1385,10 @@ const Canvas = ({ boardId, boardTitle, guest = false }: CanvasProps) => {
             selectionColor={layerIdsToColorSelection[layerId]}
             />
           ))}
-          <SelectionBox onResizeHandlePointerDown={onResizeHandlePointerDown} />
+          <SelectionBox
+            onResizeHandlePointerDown={onResizeHandlePointerDown}
+            zoom={camera.zoom}
+          />
           {canvasState.mode === CanvasMode.SelectionNet &&
             canvasState.current != null && (
               <rect

@@ -119,11 +119,19 @@ export function OnboardingTour() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Let the menu / command palette start the tour on demand.
+    const onStart = () => start();
+    window.addEventListener("softdraw:start-tour", onStart);
+
+    let t: ReturnType<typeof setTimeout> | undefined;
     if (!localStorage.getItem(STORAGE_KEY)) {
       localStorage.setItem(STORAGE_KEY, "1");
-      const t = setTimeout(start, 900);
-      return () => clearTimeout(t);
+      t = setTimeout(start, 900);
     }
+    return () => {
+      window.removeEventListener("softdraw:start-tour", onStart);
+      if (t) clearTimeout(t);
+    };
   }, []);
 
   return (

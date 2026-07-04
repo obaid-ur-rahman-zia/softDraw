@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUp,
+  Trash2,
 } from "lucide-react";
 
 export type StyleTarget = LayerType | "pencil";
@@ -31,6 +32,7 @@ interface PropertiesPanelProps {
   onChange: (partial: Partial<LayerStyle>) => void;
   hasSelection: boolean;
   onZOrder: (dir: "front" | "back" | "forward" | "backward") => void;
+  onDelete?: () => void;
 }
 
 const Section = ({
@@ -162,6 +164,7 @@ export const PropertiesPanel = ({
   onChange,
   hasSelection,
   onZOrder,
+  onDelete,
 }: PropertiesPanelProps) => {
   const isShape =
     target === LayerType.Rectangle ||
@@ -325,7 +328,7 @@ export const PropertiesPanel = ({
         <>
           <Section label="Font family">
             <OptionRow
-              value={style.fontFamily ?? "hand"}
+              value={style.fontFamily ?? "normal"}
               onSelect={(v) =>
                 onChange({ fontFamily: v as LayerStyle["fontFamily"] })
               }
@@ -403,6 +406,15 @@ export const PropertiesPanel = ({
             </Swatch>
           </div>
         </Section>
+      )}
+
+      {hasSelection && onDelete && (
+        <button
+          onClick={onDelete}
+          className="w-full flex items-center justify-center gap-2 rounded-md border border-red-200 dark:border-red-900/50 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+        >
+          <Trash2 className="h-4 w-4" /> Delete
+        </button>
       )}
     </div>
   );

@@ -125,6 +125,88 @@ export async function generateFlowchart({
   return graph;
 }
 
+export interface PresentationSlide {
+  title: string;
+  bullets: string[];
+}
+export interface Presentation {
+  title: string;
+  slides: PresentationSlide[];
+}
+
+const PRESENTATION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string" },
+    slides: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          title: { type: "string" },
+          bullets: { type: "array", items: { type: "string" } },
+        },
+        required: ["title", "bullets"],
+      },
+    },
+  },
+  required: ["title", "slides"],
+} as const;
+
+const PRESENTATION_SYSTEM_PROMPT = `You create clear, well-structured slide decks.
+Rules:
+- Return a "title" for the deck and 4–8 "slides".
+- Each slide has a short "title" and 2–5 concise "bullets" (max ~12 words each).
+- Start with a title/intro slide and end with a summary or takeaways slide.
+- Keep it focused and logically ordered. No markdown, plain text bullets.`;
+
+export async function generatePresentation({
+  prompt,
+}: {
+  prompt: string;
+}): Promise<Presentation> {
+  await requireUser();
+  const trimmed = prompt.trim();
+  if (!trimmed) throw new Error("Describe the presentation you want.");
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "AI is not configured. Add OPENAI_API_KEY to your environment."
+    );
+  }
+  const client = new OpenAI({ apiKey });
+  const response = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: PRESENTATION_SYSTEM_PROMPT },
+      { role: "user", content: trimmed },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "presentation",
+        schema: PRESENTATION_SCHEMA,
+        strict: true,
+      },
+    },
+  });
+  const message = response.choices[0]?.message;
+  if (message?.refusal) throw new Error("The model declined this request.");
+  const text = message?.content;
+  if (!text) throw new Error("The model returned no presentation.");
+  let deck: Presentation;
+  try {
+    deck = JSON.parse(text);
+  } catch {
+    throw new Error("Could not parse the generated presentation.");
+  }
+  if (!deck.slides?.length) throw new Error("The model returned no slides.");
+  return deck;
+}
+
 const WIREFRAME_SYSTEM_PROMPT = `You are an expert front-end engineer. You receive a screenshot of a hand-drawn wireframe / sketch of a UI and turn it into clean, production-ready code.
 
 Rules:
